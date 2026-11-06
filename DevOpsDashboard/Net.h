@@ -1,16 +1,11 @@
 // =============================================================================
-//  MeteoPlaneRadar
-//  One place for "fetch this URL over TLS and hand me the body".
+//  DevOpsDashboard (based on MeteoPlaneRadar by chiptron.cz)
+//  One place for "fetch this URL and hand me the body".
 //
-//  Every endpoint in this project needs the same four things: a check that
-//  there is enough internal RAM for the handshake, an insecure TLS client
-//  (we do not pin certificates - see the note in Outside.h), the response as a
-//  complete string rather than a stream, and the "Date" header fed to the clock
-//  on the way past. Repeating that in five modules is how they drift apart.
-//
-//  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
-//  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
-//  Web:     https://chiptron.cz
+//  Every request needs the same things: a check that there is enough internal
+//  RAM for a TLS handshake (https:// only), an insecure TLS client (no
+//  certificate pinning), the response as a complete string rather than a
+//  stream, and the "Date" header fed to the clock on the way past.
 // =============================================================================
 #pragma once
 #include <Arduino.h>
@@ -26,10 +21,6 @@ bool Net_GetString(const char* url, String& out, const char* tag);
 // On success *outLen holds the number of bytes written.
 bool Net_GetBinary(const char* url, uint8_t* buf, size_t cap, size_t* outLen,
                    const char* tag);
-
-// HEAD only, purely to read the "Date" header and keep the clock seeded. Used
-// when the clock screen is the only one enabled and nothing else fetches.
-bool Net_TouchDate(const char* url);
 
 // --- Keep-alive session -----------------------------------------------------
 //

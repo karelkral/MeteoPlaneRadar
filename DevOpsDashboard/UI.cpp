@@ -9,12 +9,11 @@
 // =============================================================================
 #include "UI.h"
 #include "Layout.h"
-#include "Outside.h"
+#include "Clock.h"
 #include "Display_ST7701.h"
 #include <math.h>
 #include <string.h>
 #include "qrcode.h"
-#include "Display_ST7701.h"
 
 void UI_TextCenteredIn(const char* text, int x, int w, int cy,
                        uint16_t color, uint8_t size) {
@@ -65,9 +64,9 @@ static int UI_ChordHalfWidth(int y) {
 }
 
 bool UI_StatusLineChanged() {
-  static char last[OUTSIDE_TEXT_MAX] = "";
-  char txt[OUTSIDE_TEXT_MAX];
-  Outside_StatusText(txt, sizeof(txt));
+  static char last[CLOCK_TEXT_MAX] = "";
+  char txt[CLOCK_TEXT_MAX];
+  Clock_StatusText(txt, sizeof(txt));
   if (strcmp(txt, last) == 0) return false;
   strncpy(last, txt, sizeof(last) - 1);
   last[sizeof(last) - 1] = '\0';
@@ -75,20 +74,16 @@ bool UI_StatusLineChanged() {
 }
 
 void UI_DrawStatusLine(int cy) {
-  char txt[OUTSIDE_TEXT_MAX];
-  Outside_StatusText(txt, sizeof(txt));
+  char txt[CLOCK_TEXT_MAX];
+  Clock_StatusText(txt, sizeof(txt));
   if (!txt[0]) return;                      // nothing known yet - leave it empty
 
   // Measure against the circle at the LOWER edge of the text, which is the
-  // narrower end. The longest string this can produce is "23:59   -12 °C"
-  // (~168 px at size 2) and the chord here is around 265 px, so it fits - but
-  // check anyway: a wider font or a lower line would silently overflow.
+  // narrower end.
   const int tw = Layout_TextW(txt, 2);
   int room = 2 * UI_ChordHalfWidth(cy + 16) - 8;
   if ((int)tw > room) return;
 
-  // Dark backing - on the weather screen this sits straight on top of the radar
-  // image, where white on yellow rain would be unreadable.
   gfx->fillRect(LCD_WIDTH / 2 - (int)tw / 2 - 6, cy - 3, (int)tw + 12, 22, C_BLACK);
   UI_TextCentered(txt, cy, C_WHITE, 2);
 }

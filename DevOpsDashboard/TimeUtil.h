@@ -1,6 +1,6 @@
 // =============================================================================
 //  MeteoPlaneRadar
-//  Calendar helper shared by the weather frames and the clock.
+//  Calendar helper for the clock (HTTP "Date" header -> epoch).
 //
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)

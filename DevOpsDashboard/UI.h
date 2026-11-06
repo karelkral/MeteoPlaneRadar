@@ -47,25 +47,12 @@ void UI_TextCenteredIn(const char* text, int x, int w, int cy,
 void UI_FillRing(int cx, int cy, int rIn, int rOut, float a0, float a1,
                  uint16_t color);
 
-// Half the width of the display circle at height y - i.e. how much room a line
-// of text actually has there. On a round panel the usable width shrinks fast
-// towards the top, so anything near the edge has to be measured, not assumed.
-
-// The clock + outside temperature line, centred under the screen dots. Draws
-// nothing when neither is known yet, and refuses to draw text that would not
-// fit inside the circle rather than letting it run off the edge.
+// The clock line, centred under the screen dots. Draws nothing while the time
+// is unknown, and refuses to draw text that would not fit inside the circle.
 void UI_DrawStatusLine(int cy);
 
-// Has that line changed since the last time anyone asked?
-//
-// The screens only redraw when their own Tick() says something happened, and
-// the clock at the top is drawn as part of that redraw. On a screen whose data
-// changes rarely - the mix arrives every quarter of an hour, the forecast twice
-// an hour - the clock therefore sat still between updates and looked frozen.
-// Those screens call this from their Tick() so the minute keeps moving.
-//
-// Compares the whole line rather than just the minute, so the outside
-// temperature changing is caught too. One shared record of the last text is
-// enough because only the active screen is ticked, and switching screens
-// redraws everything anyway.
+// Has that line changed since the last time anyone asked? Screens call this
+// from their Tick() so the minute keeps moving even when nothing else changes.
+// One shared record is enough: only the active screen is ticked, and switching
+// screens redraws everything anyway.
 bool UI_StatusLineChanged();

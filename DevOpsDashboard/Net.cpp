@@ -6,7 +6,7 @@
 // =============================================================================
 #include "Net.h"
 #include "Config.h"
-#include "Outside.h"
+#include "Clock.h"
 #include "NetSink.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -21,8 +21,8 @@ static void (*s_poll)() = nullptr;
 void Net_SetPollFn(void (*fn)()) { s_poll = fn; }
 static inline void poll() { if (s_poll) s_poll(); }
 
-// Collect the Date header on every request. The clock is seeded from whatever
-// we happen to be fetching anyway - see Outside.h for why there is no NTP.
+// Collect the Date header on every request - a fallback for the clock when
+// SNTP is blocked (see Clock.h).
 static const char* DATE_HDR[] = { "Date" };
 
 void Net_SessionBegin() {
@@ -91,7 +91,7 @@ bool Net_GetString(const char* url, String& out, const char* tag) {
     http.end();
     return false;
   }
-  if (http.hasHeader("Date")) Outside_NoteHttpDate(http.header("Date").c_str());
+  if (http.hasHeader("Date")) Clock_NoteHttpDate(http.header("Date").c_str());
 
   int declared = http.getSize();               // -1 when chunked / unknown
   if (declared > (int)NET_MAX_TEXT) {
@@ -139,7 +139,7 @@ bool Net_GetBinary(const char* url, uint8_t* buf, size_t cap, size_t* outLen,
 
   int code = http.GET();
   if (code != HTTP_CODE_OK) { Serial.printf("%s: HTTP %d\n", tag, code); http.end(); return false; }
-  if (http.hasHeader("Date")) Outside_NoteHttpDate(http.header("Date").c_str());
+  if (http.hasHeader("Date")) Clock_NoteHttpDate(http.header("Date").c_str());
 
   int declared = http.getSize();
   if (declared > 0 && (size_t)declared > cap) {
@@ -153,27 +153,4 @@ bool Net_GetBinary(const char* url, uint8_t* buf, size_t cap, size_t* outLen,
   if (got <= 0) return false;
   if (outLen) *outLen = got;
   return true;
-}
-
-bool Net_TouchDate(const char* url) {
-  if (WiFi.status() != WL_CONNECTED) return false;
-  if (!Net_HeapOk("HODINY")) return false;
-
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setHandshakeTimeout(NET_TLS_HANDSHAKE_S);
-  HTTPClient http;
-  http.setConnectTimeout(5000);
-  http.setTimeout(6000);
-  http.setReuse(false);
-  if (!http.begin(client, url)) return false;
-  http.collectHeaders(DATE_HDR, 1);
-  int code = http.sendRequest("HEAD");
-  bool ok = false;
-  if (code > 0 && http.hasHeader("Date")) {
-    Outside_NoteHttpDate(http.header("Date").c_str());
-    ok = true;
-  }
-  http.end();
-  return ok;
 }
