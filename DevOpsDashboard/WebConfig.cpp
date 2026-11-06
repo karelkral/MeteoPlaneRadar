@@ -1,25 +1,20 @@
 // =============================================================================
-//  MeteoPlaneRadar
+//  DevOpsDashboard
 //  The configuration web server. See WebConfig.h.
 //
-//  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//  Based on MeteoPlaneRadar by Petr / chiptron.cz (MIT, see LICENSE.txt).
 // =============================================================================
 #include "WebConfig.h"
 #include "WebPage.h"
-#include "ScreenPlanes.h"
-#include "ScreenWeather.h"
-#include "ScreenPrice.h"
 #include "Settings.h"
 #include "Status.h"
 #include "Version.h"
 #include "Config.h"
-#include "Net.h"
-#include "Forecast.h"
-#include "Energy.h"
-#include "NightMode.h"
+#include "Clock.h"
 #include "UI.h"
 #include "Display_ST7701.h"
 #include "Watchdog.h"
+#include "Board.h"
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -28,21 +23,11 @@
 #include <ArduinoJson.h>
 #include <Update.h>
 #include <esp_heap_caps.h>
-#include "Board.h"
 #include <esp_system.h>
-#include <math.h>
-#include <string.h>
-#include "TimeZone.h"
-#include "StormWatch.h"
-#include "PlaneWatch.h"
-#include "PlaneIcon.h"
-#include "ADSB.h"
-#include "Outside.h"
 #include <time.h>
 
 // Defined in the .ino - the screen actually on the display.
-extern int  MPR_CurrentScreen();
-extern bool MPR_AlertActive();
+extern int App_CurrentScreen();
 
 static WebServer  s_srv(WEB_PORT);
 static DNSServer  s_dns;
@@ -55,7 +40,6 @@ static volatile bool s_updating = false;
 // Queued remote-control requests - see the note in WebConfig.h.
 static int s_reqScreen     = -1;
 static int s_reqScreenStep = 0;
-static int s_reqRangeStep  = 0;
 
 bool WebConfig_UpdateBusy()        { return s_updating; }
 bool WebConfig_WantsWifiConnect()  { return s_wantConnect; }
@@ -64,7 +48,6 @@ bool WebConfig_WantsRestart()      { return s_wantRestart; }
 
 int WebConfig_TakeScreen()     { int v = s_reqScreen;     s_reqScreen = -1;    return v; }
 int WebConfig_TakeScreenStep() { int v = s_reqScreenStep; s_reqScreenStep = 0; return v; }
-int WebConfig_TakeRangeStep()  { int v = s_reqRangeStep;  s_reqRangeStep = 0;  return v; }
 
 // --- Helpers ----------------------------------------------------------------
 static void sendJson(int code, JsonDocument& doc) {
@@ -73,20 +56,15 @@ static void sendJson(int code, JsonDocument& doc) {
   s_srv.send(code, "application/json", out);
 }
 
+static void sendError(int code, const char* what) {
+  JsonDocument doc;
+  doc["error"] = what;
+  sendJson(code, doc);
+}
+
 static bool readBody(JsonDocument& doc) {
   if (!s_srv.hasArg("plain")) return false;
   return deserializeJson(doc, s_srv.arg("plain")) == DeserializationError::Ok;
-}
-
-// The set of enabled data screens as one value, so "did this change?" is one
-// comparison. Built from the loop rather than written out screen by screen -
-// the hand-written version had to be edited in two places every time a screen
-// was added, and was quietly wrong for the two energy screens until it was not.
-static uint8_t screenMask() {
-  uint8_t m = 0;
-  for (uint8_t i = 0; i < SCREEN_SETTINGS_I && i < 8; i++)
-    if (Settings_ScreenEnabled(i)) m |= (uint8_t)(1u << i);
-  return m;
 }
 
 // Every destructive endpoint goes through here. When no password is set this
@@ -95,16 +73,18 @@ static uint8_t screenMask() {
 static bool authed(JsonDocument& body) {
   const char* pw = body["password"] | "";
   if (Settings_CheckAdminPassword(pw)) return true;
-  s_srv.send(403, "application/json", "{\"error\":\"password\"}");
+  sendError(403, "password");
   return false;
+}
+
+static String deviceIp() {
+  return s_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
 }
 
 // --- Endpoints --------------------------------------------------------------
 static void handleRoot() {
   s_srv.sendHeader("Cache-Control", "no-store");
-  // The charset belongs in the HEADER, not only in a meta tag: a browser that
-  // reads the header first would otherwise guess, and the Czech accents on the
-  // page would come out as mojibake.
+  // The charset belongs in the HEADER, not only in a meta tag.
   s_srv.send_P(200, "text/html; charset=utf-8", PAGE_HTML);
 }
 
@@ -112,118 +92,60 @@ static void handleGetConfig() {
   JsonDocument doc;
   JsonObject o = doc.to<JsonObject>();
   Settings_ToJson(o);
-  // The remembered networks: names only. A password never leaves the device;
-  // the page is told whether one is stored, so it can say so.
-  {
-    JsonArray w = o["wifi"].to<JsonArray>();
-    for (uint8_t i = 0; i < WIFI_SLOTS; i++) {
-      JsonObject e = w.add<JsonObject>();
-      e["ssid"] = Settings_WifiSsid(i);
-      e["hasPass"] = Settings_WifiPass(i)[0] != '\0';
-    }
+  // The remembered networks: names only. A password never leaves the device.
+  JsonArray w = o["wifi"].to<JsonArray>();
+  for (uint8_t i = 0; i < WIFI_SLOTS; i++) {
+    JsonObject e = w.add<JsonObject>();
+    e["ssid"] = Settings_WifiSsid(i);
+    e["hasPass"] = Settings_WifiPass(i)[0] != '\0';
   }
   o["version"] = FW_VERSION;
   o["apMode"]  = s_apMode;
-  o["ip"]      = s_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  o["ip"]      = deviceIp();
+  o["apiIntervalMin"] = API_INTERVAL_S_MIN;
+  o["apiIntervalMax"] = API_INTERVAL_S_MAX;
   sendJson(200, doc);
 }
 
 static void handlePostConfig() {
   JsonDocument doc;
-  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!readBody(doc)) { sendError(400, "json"); return; }
 
-  // The password is write-only and never round-trips through the page, so it is
-  // handled apart from the rest of the settings.
-  //
-  // Changing it requires the current one. Without that check anyone who can
-  // reach the page could set a password and lock the owner out of the update
-  // and reset endpoints - the settings themselves are deliberately open, but
-  // that must not be a way to take the device over.
+  // Changing the password requires the current one, so nobody who can reach
+  // the page can lock the owner out of the update and reset endpoints.
   JsonVariantConst np = doc["newPassword"];
   if (!np.isNull()) {
     const char* p = np.as<const char*>();
     if (p && *p) {
-      if (!authed(doc)) return;                 // sends 403 and explains itself
+      if (!authed(doc)) return;
       Settings_SetAdminPassword(p);
-      // The update page checks the password on every request, so a new one is
-      // live immediately - no restart needed.
     }
   }
 
-  const double oldLat = Settings_Lat(), oldLon = Settings_Lon();
-  const uint8_t oldSrc = Settings_RadarSource();
-  const uint8_t oldMask = screenMask();
+  // Validated here rather than silently ignored, so the page can say why.
+  JsonVariantConst au = doc["apiUrl"];
+  if (!au.isNull()) {
+    if (!Settings_SetApiUrl(au.as<const char*>())) { sendError(400, "apiUrl"); return; }
+    doc.remove("apiUrl");
+  }
 
   Settings_FromJson(doc.as<JsonObjectConst>());
-
-  // Applied straight away - these are the ones you want to see change while
-  // you are still looking at the slider.
-  NightMode_Apply();
-
-  const uint8_t newMask = screenMask();
-  const bool moved = (fabs(oldLat - Settings_Lat()) > 1e-6) ||
-                     (fabs(oldLon - Settings_Lon()) > 1e-6);
-  if (moved) {
-    Forecast_Invalidate();
-    Energy_Invalidate();
-
-    // Moving the device out of the area a source covers switches that screen
-    // off, ONCE, at the moment the location changes. Not a permanent lock: the
-    // checkbox is still there and turning it back on sticks, which matters
-    // because the boxes in Config.h are rectangles and somebody just over the
-    // border may well want Czech prices on purpose.
-    //
-    // Doing it here rather than in the drawing code is deliberate. A screen
-    // that shows "not available here" every time the cycling reaches it is a
-    // screen that has to be switched off by hand anyway; the device may as well
-    // do the obvious thing and say so in the log.
-    if (!Energy_PriceInArea() && Settings_ScreenEnabled(SCREEN_PRICE_I)) {
-      Settings_SetScreenEnabled(SCREEN_PRICE_I, false);
-      Serial.println("Poloha mimo CR: vypinam obrazovku s cenou elektriny");
-    }
-    if (!Energy_MixInArea() && Settings_ScreenEnabled(SCREEN_MIX_I)) {
-      Settings_SetScreenEnabled(SCREEN_MIX_I, false);
-      Serial.println("Poloha mimo Evropu: vypinam obrazovku s vyrobou");
-    }
-    // Still on the Czech default after moving abroad? Europe as a whole is a
-    // better guess than a country the user does not live in. An explicit choice
-    // is left alone.
-    if (!Energy_PriceInArea() && Energy_MixInArea() &&
-        !strcmp(Settings_MixCountry(), MIX_COUNTRY_DEFAULT)) {
-      Settings_SetMixCountry("eu");
-      Serial.println("Poloha mimo CR: mix prepnut na celou Evropu");
-    }
-  }
-
-  // These reach too far into cached state (decoded radar frames, allocated
-  // buffers, which screen is even reachable) to be worth unpicking at runtime.
-  // A restart is a second and a half and guarantees a clean result.
-  if (moved || oldSrc != Settings_RadarSource() || oldMask != newMask)
-    s_wantRestart = true;
+  Set_Backlight(Settings_Backlight());     // see the change while on the slider
 
   JsonDocument res;
   res["ok"] = true;
-  res["restart"] = s_wantRestart;
   sendJson(200, res);
 }
 
-// Jump to a screen, or step one along. Disabled screens are refused rather than
-// silently ignored, so the page can say why nothing happened.
+// Jump to a screen ({"index":n}) or step one along ({"step":-1|1}).
 static void handleScreen() {
   JsonDocument doc;
-  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!readBody(doc)) { sendError(400, "json"); return; }
 
   JsonVariantConst idx = doc["index"];
   if (!idx.isNull()) {
     int i = idx.as<int>();
-    if (i < 0 || i >= SCREEN_N) {
-      s_srv.send(400, "application/json", "{\"error\":\"range\"}");
-      return;
-    }
-    if (!Settings_ScreenEnabled((uint8_t)i)) {
-      s_srv.send(409, "application/json", "{\"error\":\"disabled\"}");
-      return;
-    }
+    if (i < 0 || i >= SCREEN_N) { sendError(400, "range"); return; }
     s_reqScreen = i;
   } else {
     int st = doc["step"] | 0;
@@ -232,24 +154,26 @@ static void handleScreen() {
   s_srv.send(200, "application/json", "{\"ok\":true}");
 }
 
-// Change the range on whichever radar screen is showing. The screens that have
-// no range simply ignore it, exactly as a swipe does.
-static void handleRange() {
-  JsonDocument doc;
-  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
-  int st = doc["step"] | 0;
-  s_reqRangeStep = (st < 0) ? -1 : ((st > 0) ? +1 : 0);
-  s_srv.send(200, "application/json", "{\"ok\":true}");
+static const char* resetReason() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:  return "power on";
+    case ESP_RST_SW:       return "software";
+    case ESP_RST_PANIC:    return "PANIC";
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:      return "WATCHDOG";
+    case ESP_RST_BROWNOUT: return "BROWNOUT";
+    case ESP_RST_EXT:      return "reset pin";
+    default:               return "?";
+  }
 }
 
 static void handleStatus() {
   JsonDocument doc;
   doc["version"] = FW_VERSION;
-  // Which panel the firmware decided it is running on. One binary serves both
-  // boards, so this is the first thing to ask about when a bug report says the
-  // picture rolls or the touch is dead. A "?" means detection fell back.
-  doc["board"] = Board_Detected() ? Board_Name() : "? -> " + String(Board_Name());
-  doc["ip"]   = s_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  // A "?" means the board detection fell back.
+  doc["board"] = Board_Detected() ? String(Board_Name()) : "? -> " + String(Board_Name());
+  doc["ip"]   = deviceIp();
   doc["ssid"] = s_apMode ? String(AP_SSID) : WiFi.SSID();
   doc["rssi"] = s_apMode ? 0 : WiFi.RSSI();
 
@@ -261,191 +185,27 @@ static void handleStatus() {
 
   doc["heap"]  = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   doc["psram"] = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+  doc["resetReason"] = resetReason();
 
-  const char* rr = "?";
-  switch (esp_reset_reason()) {
-    case ESP_RST_POWERON:  rr = "power on"; break;
-    case ESP_RST_SW:       rr = "software"; break;
-    case ESP_RST_PANIC:    rr = "PANIC"; break;
-    case ESP_RST_INT_WDT:
-    case ESP_RST_TASK_WDT:
-    case ESP_RST_WDT:      rr = "WATCHDOG"; break;
-    case ESP_RST_BROWNOUT: rr = "BROWNOUT"; break;
-    case ESP_RST_EXT:      rr = "reset pin"; break;
-    default: break;
+  if (Clock_TimeValid()) {
+    time_t now = time(nullptr);
+    struct tm lt;
+    localtime_r(&now, &lt);
+    char tb[24];
+    strftime(tb, sizeof(tb), "%Y-%m-%d %H:%M:%S", &lt);
+    doc["time"] = tb;
+  } else {
+    doc["time"] = "";
   }
-  doc["resetReason"] = rr;
-
-  // The time zone, because "the clock is wrong" is otherwise impossible to
-  // diagnose remotely. Says where the offset came from: the compiled-in Czech
-  // rule, or the forecast for the user's own coordinates.
-  {
-    char tzb[48];
-    const int off = TimeZone_Offset();
-    snprintf(tzb, sizeof(tzb), "%s (UTC%+d:%02d, %s)", TimeZone_Text(),
-             off / 3600, (off < 0 ? -off : off) % 3600 / 60,
-             TimeZone_FromNetwork() ? "podle polohy" : "z Config.h");
-    doc["timezone"] = tzb;
-  }
-
-  // What the device is showing right now, so the remote control can highlight
-  // the active screen and print the range instead of guessing.
-  const uint8_t scr = (uint8_t)MPR_CurrentScreen();
-  doc["screen"] = scr;
-  char rb[24] = "";
-  if      (scr == SCREEN_PLANES_I) ScreenPlanes_RangeText(rb, sizeof(rb));
-  else if (scr == SCREEN_METEO_I)  ScreenWeather_RangeText(rb, sizeof(rb));
-  // The price screen has no range in kilometres, but it does have two states
-  // the remote control can step through, so it answers here too and the -/+
-  // buttons stay live instead of greying out.
-  else if (scr == SCREEN_PRICE_I)  ScreenPrice_RangeText(rb, sizeof(rb));
-  doc["range"] = rb;                       // empty on screens without one
-
-  JsonArray en = doc["enabled"].to<JsonArray>();
-  for (uint8_t i = 0; i < SCREEN_N; i++) en.add(Settings_ScreenEnabled(i));
+  doc["screen"] = App_CurrentScreen();
 
   char b[64];
-  Status_Text(ST_ADSB, b, sizeof(b));     doc["adsb"] = b;
-  Status_Text(ST_RADAR, b, sizeof(b));    doc["radar"] = b;
-  Status_Text(ST_FORECAST, b, sizeof(b)); doc["forecast"] = b;
-  Status_Text(ST_PRICE, b, sizeof(b));    doc["price"] = b;
-  Status_Text(ST_MIX, b, sizeof(b));      doc["mix"] = b;
-  Status_Text(ST_STORM, b, sizeof(b));    doc["storm"] = b;
-  Status_Text(ST_PLANEWATCH, b, sizeof(b)); doc["planeWatch"] = b;
+  Status_Text(ST_API, b, sizeof(b)); doc["api"] = b;
+  Status_Text(ST_NTP, b, sizeof(b)); doc["ntp"] = b;
   sendJson(200, doc);
 }
 
-// --- Remembered WiFi networks (0.8.0) ----------------------------------------
-// Saves the three slots WITHOUT connecting. The point is to enter the office
-// network at home, before the device is carried there; it is tried whenever
-// the current network goes away. A missing or empty "pass" keeps whatever is
-// stored, because the page never knows the stored passwords.
-static void handleWifiList() {
-  JsonDocument doc;
-  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
-  JsonArrayConst nets = doc["nets"];
-  if (nets.isNull()) { s_srv.send(400, "application/json", "{\"error\":\"nets\"}"); return; }
-  for (uint8_t i = 0; i < WIFI_SLOTS && i < nets.size(); i++) {
-    const char* ssid = nets[i]["ssid"] | "";
-    const char* pass = nets[i]["pass"] | "";
-    Settings_SetWifiSlot(i, ssid, (pass && *pass) ? pass : nullptr);
-  }
-  s_srv.send(200, "application/json", "{\"ok\":true}");
-}
-
-// --- Home Assistant (0.8.0) ---------------------------------------------------
-// One flat-ish JSON object for Home Assistant's RESTful integration: poll it
-// every minute or so and pull the values out with value_template. Read-only,
-// no password - it says nothing the screen does not already show to anyone in
-// the room. Off unless switched on in the web UI. NOT TESTED against a real
-// Home Assistant: the shape follows the documented REST sensor, but nobody has
-// pointed one at it yet.
-static const char* const SCREEN_KEYS[SCREEN_N] = {
-  "clock", "planes", "meteo", "forecast", "price", "mix", "settings" };
-
-static void handleHa() {
-  if (!Settings_HaEnabled()) {
-    s_srv.send(404, "application/json", "{\"error\":\"disabled\"}");
-    return;
-  }
-  JsonDocument doc;
-  doc["version"] = FW_VERSION;
-  doc["uptime_s"] = (uint32_t)(millis() / 1000UL);
-  doc["ip"]   = WiFi.localIP().toString();
-  doc["ssid"] = WiFi.SSID();
-  doc["rssi"] = WiFi.RSSI();
-  doc["lat"]  = Settings_Lat();
-  doc["lon"]  = Settings_Lon();
-
-  const int scr = MPR_CurrentScreen();
-  doc["screen"] = (scr >= 0 && scr < SCREEN_N) ? SCREEN_KEYS[scr] : "?";
-  doc["night"] = Settings_IsNight();
-  doc["brightness"] = Settings_Backlight();
-
-  // Weather. null rather than 0 when not known yet: a 0 degC reading and "no
-  // data" must not look the same in a graph.
-  if (Forecast_CurrentValid()) {
-    doc["temperature"]  = roundf(Forecast_CurrentTemp() * 10) / 10;
-    doc["wind_kmh"]     = roundf(Forecast_CurrentWind() * 10) / 10;
-    doc["precip_mm"]    = roundf(Forecast_CurrentPrecip() * 10) / 10;
-    doc["weather_code"] = Forecast_CurrentCode();
-  } else {
-    doc["temperature"] = nullptr; doc["wind_kmh"] = nullptr;
-    doc["precip_mm"] = nullptr;   doc["weather_code"] = nullptr;
-  }
-  if (Forecast_DayCount() > 0) {
-    const FcDay& d = Forecast_Days()[0];
-    doc["today_min"] = roundf(d.tmin * 10) / 10;
-    doc["today_max"] = roundf(d.tmax * 10) / 10;
-  }
-  time_t rise, set;
-  if (Forecast_SunTimes(&rise, &set)) {
-    char t[8]; struct tm lt;
-    localtime_r(&rise, &lt); snprintf(t, sizeof(t), "%02d:%02d", lt.tm_hour, lt.tm_min); doc["sunrise"] = t;
-    localtime_r(&set, &lt);  snprintf(t, sizeof(t), "%02d:%02d", lt.tm_hour, lt.tm_min); doc["sunset"] = t;
-  }
-  if (AirQuality_Valid()) {
-    if (AirQuality_Aqi() >= 0) doc["aqi"] = AirQuality_Aqi();
-    doc["pm25"] = roundf(AirQuality_Pm25() * 10) / 10;
-  }
-
-  // Storm watch. Runs whenever this endpoint is on, so these are live even with
-  // the "radar only when a storm is coming" option off.
-  {
-    JsonObject st = doc["storm"].to<JsonObject>();
-    st["active"]    = StormWatch_Active();
-    st["valid"]     = StormWatch_Valid();
-    st["coverage"]  = StormWatch_InCoverage();
-    st["threshold_dbz"] = Settings_StormDbz();
-    st["radius_km"] = Settings_StormKm();
-    if (StormWatch_Valid()) {
-      st["max_dbz"] = StormWatch_MaxDbz() >= 0 ? (int)StormWatch_MaxDbz() : 0;
-      if (StormWatch_NearestKm() >= 0) st["nearest_km"] = roundf(StormWatch_NearestKm());
-      else                             st["nearest_km"] = nullptr;
-      st["area_km2"] = StormWatch_Pixels();
-      st["frame"]    = StormWatch_FrameTime();
-    }
-  }
-
-  // Aircraft. The list is whatever was fetched last: the small watch area
-  // while another screen is up, the radar range while the aircraft screen is.
-  {
-    JsonObject ac = doc["aircraft"].to<JsonObject>();
-    ac["count"] = ADSB_DataStale() ? 0 : ADSB_Count();
-    if (ADSB_DataAgeMs() != 0xFFFFFFFFUL) ac["data_age_s"] = ADSB_DataAgeMs() / 1000UL;
-    ac["stale"] = ADSB_DataStale();
-    ac["alert"] = MPR_AlertActive();
-    float km = 0, brg = 0; bool win = false;
-    const int i = PlaneWatch_Best(&km, &brg, &win);
-    if (i >= 0) {
-      const Aircraft& a = ADSB_List()[i];
-      ac["callsign"]    = a.callsign[0] ? a.callsign : a.hex;
-      ac["hex"]         = a.hex;
-      ac["type"]        = a.type;
-      ac["registration"]= a.reg;
-      ac["kind"]        = PlaneIcon_Name(a.icon);
-      ac["distance_km"] = roundf(km * 10) / 10;
-      ac["bearing"]     = (int)lroundf(brg) % 360;
-      ac["altitude_m"]  = (int)lroundf(a.altFt * 0.3048f);
-      ac["speed_kmh"]   = (int)lroundf(a.gsKt * 1.852f);
-      ac["in_window"]   = win;
-      ac["squawk"]      = a.squawk;
-    } else {
-      ac["callsign"] = nullptr;
-      ac["distance_km"] = nullptr;
-    }
-  }
-
-  // Electricity, only when those screens are on (otherwise nothing is fetched).
-  if (Energy_PriceValid()) {
-    doc["price_spot_czk_mwh"] = roundf(Energy_PriceNow());
-    doc["price_czk_kwh"] = roundf(Energy_FinalCzkKwh(Energy_PriceNow()) * 1000) / 1000;
-  }
-  if (Energy_MixValid()) doc["renewable_pct"] = roundf(Energy_RenewableShare() * 10) / 10;
-
-  sendJson(200, doc);
-}
-
+// --- WiFi -------------------------------------------------------------------
 static void handleScan() {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
@@ -459,90 +219,37 @@ static void handleScan() {
   sendJson(200, doc);
 }
 
+// Remember a network and connect to it (used by the captive portal).
 static void handleWifi() {
   JsonDocument doc;
-  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!readBody(doc)) { sendError(400, "json"); return; }
   const char* ssid = doc["ssid"] | "";
   const char* pass = doc["pass"] | "";
-  if (!*ssid) { s_srv.send(400, "application/json", "{\"error\":\"ssid\"}"); return; }
+  if (!*ssid) { sendError(400, "ssid"); return; }
   Settings_SetWifi(ssid, pass);
   s_wantConnect = true;
-  JsonDocument res; res["ok"] = true;
-  sendJson(200, res);
+  s_srv.send(200, "application/json", "{\"ok\":true}");
 }
 
-// Town name -> coordinates, so nobody has to look up their latitude by hand.
-// Proxied through the device because the page is served from the device and a
-// browser would refuse the cross-origin call.
-static void handleGeocode() {
-  String q = s_srv.arg("q");
-  if (q.length() == 0) { s_srv.send(400, "application/json", "[]"); return; }
-
-  String enc;
-  for (size_t i = 0; i < q.length(); i++) {
-    char ch = q[i];
-    if (isalnum((unsigned char)ch)) enc += ch;
-    else { char b[4]; snprintf(b, sizeof(b), "%%%02X", (unsigned char)ch); enc += b; }
-  }
-
-  char url[220];
-  snprintf(url, sizeof(url), "%s?name=%s&count=8&language=%s&format=json",
-           GEOCODE_URL, enc.c_str(), Lang_Get() == LANG_EN ? "en" : "cs");
-
-  String body;
-  if (!Net_GetString(url, body, "GEOKOD")) { s_srv.send(502, "application/json", "[]"); return; }
-
-  JsonDocument filter;
-  JsonObject f = filter["results"].add<JsonObject>();
-  f["name"] = true; f["latitude"] = true; f["longitude"] = true; f["country"] = true;
+// Save the remembered networks WITHOUT connecting. A missing or empty "pass"
+// keeps whatever is stored, because the page never knows the stored passwords.
+static void handleWifiList() {
   JsonDocument doc;
-  if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
-    s_srv.send(502, "application/json", "[]");
-    return;
+  if (!readBody(doc)) { sendError(400, "json"); return; }
+  JsonArrayConst nets = doc["nets"];
+  if (nets.isNull()) { sendError(400, "nets"); return; }
+  for (uint8_t i = 0; i < WIFI_SLOTS && i < nets.size(); i++) {
+    const char* ssid = nets[i]["ssid"] | "";
+    const char* pass = nets[i]["pass"] | "";
+    Settings_SetWifiSlot(i, ssid, (pass && *pass) ? pass : nullptr);
   }
-
-  JsonDocument out;
-  JsonArray arr = out.to<JsonArray>();
-  for (JsonObjectConst r : doc["results"].as<JsonArrayConst>()) {
-    JsonObject o = arr.add<JsonObject>();
-    o["name"] = r["name"];
-    o["country"] = r["country"];
-    o["lat"] = r["latitude"];
-    o["lon"] = r["longitude"];
-  }
-  sendJson(200, out);
+  s_srv.send(200, "application/json", "{\"ok\":true}");
 }
 
-static void handleExport() {
-  JsonDocument doc;
-  JsonObject o = doc.to<JsonObject>();
-  Settings_ToJson(o);
-  o["version"] = FW_VERSION;
-  // Deliberately absent: the WiFi password and the admin password. A backup
-  // file ends up in a download folder, in an email, in a support ticket.
-  String out;
-  serializeJsonPretty(doc, out);
-  s_srv.sendHeader("Content-Disposition", "attachment; filename=meteoplaneradar.json");
-  s_srv.send(200, "application/json", out);
-}
-
-static void handleImport() {
-  JsonDocument doc;
-  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
-  if (!authed(doc)) return;
-  JsonObjectConst cfg = doc["config"];
-  if (cfg.isNull()) { s_srv.send(400, "application/json", "{\"error\":\"config\"}"); return; }
-  Settings_FromJson(cfg);
-  NightMode_Apply();
-  s_wantRestart = true;
-  JsonDocument res; res["ok"] = true;
-  sendJson(200, res);
-}
-
+// --- System -----------------------------------------------------------------
 static void handleReboot() {
   s_srv.send(200, "application/json", "{\"ok\":true}");
-  delay(200);
-  ESP.restart();
+  s_wantRestart = true;          // loop() restarts once the reply is out
 }
 
 static void handleReset() {
@@ -550,14 +257,12 @@ static void handleReset() {
   readBody(doc);
   if (!authed(doc)) return;
   s_srv.send(200, "application/json", "{\"ok\":true}");
-  delay(200);
   Settings_ClearAll();
-  ESP.restart();
+  s_wantRestart = true;
 }
 
 // Captive portal: whatever the phone asks for, hand it the setup page. Without
-// this the "sign in to network" banner never appears and the user is left
-// typing an IP address they have not been told.
+// this the "sign in to network" banner never appears.
 static void handleNotFound() {
   if (s_apMode) {
     s_srv.sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/", true);
@@ -690,7 +395,7 @@ static void handleUpdateUpload() {
       if (s_updErr.length()) return;
       if (Update.end(true)) {
         s_updOk = true;
-        Serial.printf("OTA: hotovo, %u B\n", (unsigned)up.totalSize);
+        Serial.printf("OTA: done, %u B\n", (unsigned)up.totalSize);
         otaEnd(true);
       } else {
         s_updErr = Update.errorString();
@@ -722,24 +427,30 @@ static void handleUpdateDone() {
 }
 
 // --- Lifecycle --------------------------------------------------------------
+static void startMdns() {
+  if (MDNS.begin(WEB_HOSTNAME)) {
+    MDNS.addService("http", "tcp", WEB_PORT);
+    Serial.printf("Web: http://%s.local/ or http://%s/\n",
+                  WEB_HOSTNAME, WiFi.localIP().toString().c_str());
+  } else {
+    Serial.printf("Web: http://%s/  (mDNS did not start)\n",
+                  WiFi.localIP().toString().c_str());
+  }
+}
+
 void WebConfig_Begin(bool apMode) {
   s_apMode = apMode;
 
-  // The handlers are registered ONCE for the life of the process. This function
-  // is called at least twice in a normal boot - first for the access point,
-  // then again after joining the home network - and WebServer::on() appends to
-  // a list rather than replacing, so registering again would leave a duplicate
-  // of every route behind.
+  // The handlers are registered ONCE: this is called again when the device
+  // moves from the access point to the home network, and WebServer::on()
+  // appends rather than replaces.
   if (s_running) {
-    // Only the role-specific parts change.
     if (apMode) {
       s_dns.setErrorReplyCode(DNSReplyCode::NoError);
       s_dns.start(53, "*", WiFi.softAPIP());
     } else {
       s_dns.stop();
-      if (MDNS.begin(WEB_HOSTNAME)) MDNS.addService("http", "tcp", WEB_PORT);
-      Serial.printf("Web: http://%s.local/ nebo http://%s/\n",
-                    WEB_HOSTNAME, WiFi.localIP().toString().c_str());
+      startMdns();
     }
     return;
   }
@@ -749,18 +460,12 @@ void WebConfig_Begin(bool apMode) {
   s_srv.on("/api/config", HTTP_POST, handlePostConfig);
   s_srv.on("/api/status", HTTP_GET, handleStatus);
   s_srv.on("/api/screen", HTTP_POST, handleScreen);
-  s_srv.on("/api/range", HTTP_POST, handleRange);
   s_srv.on("/api/scan", HTTP_GET, handleScan);
   s_srv.on("/api/wifi", HTTP_POST, handleWifi);
   s_srv.on("/api/wifilist", HTTP_POST, handleWifiList);
-  s_srv.on("/api/ha", HTTP_GET, handleHa);
-  s_srv.on("/api/geocode", HTTP_GET, handleGeocode);
-  s_srv.on("/api/export", HTTP_GET, handleExport);
-  s_srv.on("/api/import", HTTP_POST, handleImport);
   s_srv.on("/api/reboot", HTTP_POST, handleReboot);
   s_srv.on("/api/reset", HTTP_POST, handleReset);
-  // The update page authenticates with HTTP Basic when a password is set. See
-  // the note in Settings.h about why the password is stored in the clear.
+  // HTTP Basic when a password is set - see Settings.h.
   s_srv.on("/update", HTTP_GET, handleUpdatePage);
   s_srv.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   s_srv.onNotFound(handleNotFound);
@@ -771,16 +476,9 @@ void WebConfig_Begin(bool apMode) {
   if (apMode) {
     s_dns.setErrorReplyCode(DNSReplyCode::NoError);
     s_dns.start(53, "*", WiFi.softAPIP());
-    Serial.printf("Web: portal na http://%s/\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf("Web: portal at http://%s/\n", WiFi.softAPIP().toString().c_str());
   } else {
-    if (MDNS.begin(WEB_HOSTNAME)) {
-      MDNS.addService("http", "tcp", WEB_PORT);
-      Serial.printf("Web: http://%s.local/ nebo http://%s/\n",
-                    WEB_HOSTNAME, WiFi.localIP().toString().c_str());
-    } else {
-      Serial.printf("Web: http://%s/  (mDNS se nespustilo)\n",
-                    WiFi.localIP().toString().c_str());
-    }
+    startMdns();
   }
 }
 
