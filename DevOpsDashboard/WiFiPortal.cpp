@@ -1,8 +1,6 @@
 // =============================================================================
-//  MeteoPlaneRadar
+//  DevOpsDashboard (based on MeteoPlaneRadar by chiptron.cz)
 //  WiFi connection and the configuration access point. See WiFiPortal.h.
-//
-//  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 // =============================================================================
 #include "WiFiPortal.h"
 #include "WebConfig.h"
@@ -32,8 +30,7 @@ String WiFi_IP()   { return WiFi_IsConnected() ? WiFi.localIP().toString()
 void WiFi_DrawApScreen() {
   gfx->fillScreen(C_BLACK);
 
-  UI_TextCentered("MeteoPlaneRadar", 34, C_CYAN, 2);
-  UI_TextCentered("chiptron.cz", 58, C_GRAY, 1);
+  UI_TextCentered("DevOps Dashboard", 40, C_CYAN, 2);
   UI_TextCentered("Scan with your phone:", 78, C_GRAY, 1);
 
   const int qrSize = 190;
