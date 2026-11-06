@@ -13,7 +13,6 @@
 #include "Status.h"
 #include "Version.h"
 #include "Config.h"
-#include "Lang.h"
 #include "Net.h"
 #include "Forecast.h"
 #include "Energy.h"
@@ -574,24 +573,19 @@ static void handleNotFound() {
 // the drawing code can do about it, so the backlight goes off for the duration
 // and the browser shows the real progress bar.
 static void otaStart() {
-  const bool en = (Lang_Get() == LANG_EN);
   s_updating = true;
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered(en ? "Updating firmware..." : "Probiha aktualizace...",
-                  LCD_HEIGHT / 2 - 10, C_WHITE, 2);
-  UI_TextCentered(en ? "Do not disconnect power" : "Neodpojuj napajeni",
-                  LCD_HEIGHT / 2 + 20, C_GRAY, 1);
+  UI_TextCentered("Updating firmware...", LCD_HEIGHT / 2 - 10, C_WHITE, 2);
+  UI_TextCentered("Do not disconnect power", LCD_HEIGHT / 2 + 20, C_GRAY, 1);
   gfx->flush();
   delay(700);
   Set_Backlight(0);
 }
 
 static void otaEnd(bool ok) {
-  const bool en = (Lang_Get() == LANG_EN);
   Set_Backlight(Settings_Backlight());
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered(ok ? (en ? "Done, restarting..." : "Hotovo, restartuji...")
-                     : (en ? "Update failed"       : "Aktualizace selhala"),
+  UI_TextCentered(ok ? "Done, restarting..." : "Update failed",
                   LCD_HEIGHT / 2, ok ? C_GREEN : C_RED, 2);
   gfx->flush();
   s_updating = false;
@@ -614,9 +608,9 @@ static bool updateAuthed() {
 }
 
 static const char UPDATE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
-<html lang="{{LANG}}"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{TITLE}}</title><style>
+<title>Firmware update</title><style>
 body{background:#111;color:#eee;font:16px system-ui,sans-serif;margin:0;padding:24px;
  max-width:520px;margin-inline:auto}
 h1{font-size:20px;margin:0 0 4px}
@@ -630,50 +624,34 @@ progress{width:100%;height:10px;margin-top:16px}
 #s{margin-top:10px;min-height:1.4em;font-weight:600}
 a{color:#5bf}
 </style></head><body>
-<h1>{{TITLE}}</h1>
-<p>{{HINT}}</p>
+<h1>Firmware update</h1>
+<p>Pick the <b>.ino.bin</b> file (the one without <i>merged</i>). The display goes dark while the flash is written and comes back on when it is done.</p>
 <input type="file" id="f" accept=".bin">
-<button id="b">{{SEND}}</button>
+<button id="b">Upload</button>
 <progress id="p" value="0" max="100"></progress>
 <div id="s"></div>
-<p><a href="/">{{BACK}}</a></p>
+<p><a href="/">Back to settings</a></p>
 <script>
 var f=document.getElementById('f'),b=document.getElementById('b'),
     p=document.getElementById('p'),s=document.getElementById('s');
 b.onclick=function(){
- if(!f.files.length){s.textContent='{{PICK}}';return;}
+ if(!f.files.length){s.textContent='Pick a file first.';return;}
  var fd=new FormData();fd.append('update',f.files[0]);
  var x=new XMLHttpRequest();x.open('POST','/update');
  x.upload.onprogress=function(e){if(e.lengthComputable){
    var v=Math.round(e.loaded/e.total*100);p.value=v;s.textContent=v+' %';}};
  x.onload=function(){b.disabled=false;f.disabled=false;
-   if(x.status==200){p.value=100;s.textContent='{{OK}}';}
-   else{s.textContent='{{FAIL}}: '+(x.responseText||x.status);}};
- x.onerror=function(){b.disabled=false;f.disabled=false;s.textContent='{{FAIL}}';};
+   if(x.status==200){p.value=100;s.textContent='Done. The device is restarting.';}
+   else{s.textContent='Update failed: '+(x.responseText||x.status);}};
+ x.onerror=function(){b.disabled=false;f.disabled=false;s.textContent='Update failed';};
  b.disabled=true;f.disabled=true;s.textContent='0 %';
  x.send(fd);};
 </script></body></html>)rawliteral";
 
 static void handleUpdatePage() {
   if (!updateAuthed()) { s_srv.requestAuthentication(); return; }
-  const bool en = (Lang_Get() == LANG_EN);
-  String p = FPSTR(UPDATE_HTML);
-  p.replace("{{LANG}}",  en ? "en" : "cs");
-  p.replace("{{TITLE}}", en ? "Firmware update" : "Aktualizace firmwaru");
-  p.replace("{{HINT}}",  en ? "Pick the <b>.ino.bin</b> file (the one without "
-                              "<i>merged</i>). The display goes dark while the "
-                              "flash is written and comes back on when it is done."
-                            : "Vyberte soubor <b>.ino.bin</b> (ten bez <i>merged</i>). "
-                              "Displej po dobu zapisu zhasne a po dokonceni se "
-                              "sam rozsviti.");
-  p.replace("{{SEND}}",  en ? "Upload"           : "Nahrat");
-  p.replace("{{BACK}}",  en ? "Back to settings" : "Zpet na nastaveni");
-  p.replace("{{PICK}}",  en ? "Pick a file first." : "Nejdriv vyberte soubor.");
-  p.replace("{{OK}}",    en ? "Done. The device is restarting."
-                            : "Hotovo. Zarizeni se restartuje.");
-  p.replace("{{FAIL}}",  en ? "Update failed"    : "Aktualizace selhala");
   s_srv.sendHeader("Cache-Control", "no-store");
-  s_srv.send(200, "text/html; charset=utf-8", p);
+  s_srv.send_P(200, "text/html; charset=utf-8", UPDATE_HTML);
 }
 
 // Called repeatedly by WebServer as the body arrives. The whole transfer runs

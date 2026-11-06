@@ -68,10 +68,6 @@ const AAFontSet* AAFont_ClockSet(uint8_t clockFont);
 // centred text stays centred.
 bool AAText_Enabled();                 // a smooth face is selected
 
-// A Czech string written straight into the code rather than into Lang.h: the
-// accented spelling when a smooth face can draw it, the plain one for the
-// built-in font, which has no accents.
-#define CZT(plain, accented) (AAText_Enabled() ? (accented) : (plain))
 // Width print() will produce for this string at this text size.
 int  AAText_Width(const uint8_t* s, size_t n, uint8_t size);
 // Draws at the print() cursor (top-left of the 6x8 cell) and returns the

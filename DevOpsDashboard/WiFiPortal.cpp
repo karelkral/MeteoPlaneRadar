@@ -4,11 +4,9 @@
 //
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 // =============================================================================
-#include "AAFont.h"   // CZT(): accents with the smooth fonts
 #include "WiFiPortal.h"
 #include "WebConfig.h"
 #include "Settings.h"
-#include "Lang.h"
 #include "UI.h"
 #include "Display_ST7701.h"
 #include "Watchdog.h"
@@ -32,30 +30,25 @@ String WiFi_IP()   { return WiFi_IsConnected() ? WiFi.localIP().toString()
 
 // --- Screens ----------------------------------------------------------------
 void WiFi_DrawApScreen() {
-  const bool en = (Lang_Get() == LANG_EN);
   gfx->fillScreen(C_BLACK);
 
   UI_TextCentered("MeteoPlaneRadar", 34, C_CYAN, 2);
   UI_TextCentered("chiptron.cz", 58, C_GRAY, 1);
-  UI_TextCentered(en ? "Scan with your phone:" : "Naskenuj mobilem:", 78, C_GRAY, 1);
+  UI_TextCentered("Scan with your phone:", 78, C_GRAY, 1);
 
   const int qrSize = 190;
   UI_DrawWifiQR(AP_SSID, AP_PASSWORD, /*open=*/true,
                 (LCD_WIDTH - qrSize) / 2, 98, qrSize);
 
   UI_TextCentered(AP_SSID, 300, C_WHITE, 1);
-  UI_TextCentered(en ? "no password  |  then open 192.168.4.1"
-                     : CZT("bez hesla  |  pak otevri 192.168.4.1", "bez hesla  |  pak otevři 192.168.4.1"), 322, C_GRAY, 1);
-  UI_TextCentered(en ? "Waiting for your network..."
-                     : CZT("Cekam na zadani site...", "Čekám na zadání sítě..."), 348, C_YELLOW, 1);
+  UI_TextCentered("no password  |  then open 192.168.4.1", 322, C_GRAY, 1);
+  UI_TextCentered("Waiting for your network...", 348, C_YELLOW, 1);
   gfx->flush();
 }
 
 static void drawConnecting(const char* ssid) {
-  const bool en = (Lang_Get() == LANG_EN);
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered(en ? "Connecting to WiFi..." : CZT("Pripojuji k WiFi...", "Připojuji k WiFi..."),
-                  LCD_HEIGHT / 2 - 20, C_WHITE, 2);
+  UI_TextCentered("Connecting to WiFi...", LCD_HEIGHT / 2 - 20, C_WHITE, 2);
   if (ssid && *ssid) UI_TextCentered(ssid, LCD_HEIGHT / 2 + 12, C_CYAN, 2);
   gfx->flush();
 }

@@ -5,7 +5,6 @@
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 // =============================================================================
 #include "Status.h"
-#include "Lang.h"
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -30,8 +29,7 @@ void Status_Text(StatusSlot slot, char* out, size_t cap) {
   if (!s_at[slot]) { snprintf(out, cap, "-"); return; }
 
   unsigned long age = (millis() - s_at[slot]) / 1000UL;
-  const bool en = (Lang_Get() == LANG_EN);
-  if (age < 90)          snprintf(out, cap, "%s (%lu %s)", s_txt[slot], age, en ? "s ago" : "s zpet");
-  else if (age < 5400)   snprintf(out, cap, "%s (%lu %s)", s_txt[slot], age / 60, en ? "min ago" : "min zpet");
-  else                   snprintf(out, cap, "%s (%lu %s)", s_txt[slot], age / 3600, en ? "h ago" : "h zpet");
+  if (age < 90)          snprintf(out, cap, "%s (%lu s ago)",   s_txt[slot], age);
+  else if (age < 5400)   snprintf(out, cap, "%s (%lu min ago)", s_txt[slot], age / 60);
+  else                   snprintf(out, cap, "%s (%lu h ago)",   s_txt[slot], age / 3600);
 }
