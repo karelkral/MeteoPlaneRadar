@@ -6,6 +6,7 @@
 // =============================================================================
 #include "Clock.h"
 #include "Config.h"
+#include "Status.h"
 #include "TimeUtil.h"
 #include <esp_sntp.h>
 #include <time.h>
@@ -54,6 +55,15 @@ void Clock_NoteHttpDate(const char* date) {
 }
 
 void Clock_Tick() {
+  // The SNTP callback runs in another task, so the note is left from here.
+  static bool s_ntpNoted = false;
+  if (s_ntpSynced && !s_ntpNoted) {
+    s_ntpNoted = true;
+    Status_Set(ST_NTP, "OK, NTP");
+  } else if (s_dateSet && !s_ntpSynced && !s_logged) {
+    Status_Set(ST_NTP, "OK, HTTP Date header (no NTP yet)");
+  }
+
   if (s_logged || !Clock_TimeValid()) return;
   s_logged = true;
   time_t now = time(nullptr);
