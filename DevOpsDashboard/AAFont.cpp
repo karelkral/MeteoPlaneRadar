@@ -7,9 +7,7 @@
 #include "AAFont.h"
 #include "ClockFonts.h"
 #include "Canvas16.h"
-#include "Config.h"
 #include "UI.h"
-#include "Settings.h"
 
 // Next code point from a UTF-8 string. Malformed bytes come back one by one as
 // themselves, which the glyph lookup then simply does not find.
@@ -131,40 +129,22 @@ void AAFont_DrawCentered(const AAFont* f, const char* s, int cx, int y, uint16_t
   AAFont_Draw(f, s, cx - AAFont_TextW(f, s) / 2, y, color);
 }
 
-static const AAFontSet SET_INTER   = { &FONT_INTER_L,   &FONT_INTER_M,   &FONT_INTER_S };
-static const AAFontSet SET_POPPINS = { &FONT_POPPINS_L, &FONT_POPPINS_M, &FONT_POPPINS_S };
-static const AAFontSet SET_THIN    = { &FONT_THIN_L,    &FONT_THIN_M,    &FONT_THIN_S };
+static const AAFontSet SET_INTER = { &FONT_INTER_L, &FONT_INTER_M, &FONT_INTER_S };
 
-const AAFontSet* AAFont_ClockSet(uint8_t clockFont) {
-  switch (clockFont) {
-    case CLOCK_FONT_INTER:   return &SET_INTER;
-    case CLOCK_FONT_POPPINS: return &SET_POPPINS;
-    case CLOCK_FONT_THIN:    return &SET_THIN;
-    default:                 return nullptr;
-  }
-}
+const AAFontSet* AAFont_ClockSet() { return &SET_INTER; }
 
 // -----------------------------------------------------------------------------
-//  Every other screen (0.8.5) - see AAFont.h
+//  Every print() - see AAFont.h
 // -----------------------------------------------------------------------------
 struct TextSet { const AAFont* t[5]; };
-static const TextSet TEXT_INTER   = {{ &FONT_INTER_T1,   &FONT_INTER_T2,   &FONT_INTER_T3,   &FONT_INTER_T4,   &FONT_INTER_T5 }};
-static const TextSet TEXT_POPPINS = {{ &FONT_POPPINS_T1, &FONT_POPPINS_T2, &FONT_POPPINS_T3, &FONT_POPPINS_T4, &FONT_POPPINS_T5 }};
-static const TextSet TEXT_THIN    = {{ &FONT_THIN_T1,    &FONT_THIN_T2,    &FONT_THIN_T3,    &FONT_THIN_T4,    &FONT_THIN_T5 }};
+static const TextSet TEXT_INTER = {{ &FONT_INTER_T1, &FONT_INTER_T2, &FONT_INTER_T3, &FONT_INTER_T4, &FONT_INTER_T5 }};
 
 static const AAFont* textFont(uint8_t size) {
   if (size < 1 || size > 5) return nullptr;
-  const TextSet* t = nullptr;
-  switch (Settings_ClockFont()) {
-    case CLOCK_FONT_INTER:   t = &TEXT_INTER;   break;
-    case CLOCK_FONT_POPPINS: t = &TEXT_POPPINS; break;
-    case CLOCK_FONT_THIN:    t = &TEXT_THIN;    break;
-    default: return nullptr;
-  }
-  return t->t[size - 1];
+  return TEXT_INTER.t[size - 1];
 }
 
-bool AAText_Enabled() { return Settings_ClockFont() != CLOCK_FONT_PIXEL; }
+bool AAText_Enabled() { return true; }
 
 // What the built-in font would take: 6 px per byte and size step. Per BYTE,
 // not per character, so a UTF-8 string - which the built-in font would have
