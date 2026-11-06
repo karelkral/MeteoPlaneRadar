@@ -342,17 +342,18 @@ static void displayWatchdog() {
     Set_Backlight(Settings_Backlight());
   } else if (stalled >= DISPLAY_WD_REBOOT_MS) {
     Serial.printf("DISPLAY: panel not recovered after %lu ms, restarting\n", stalled);
-    Serial.flush();
+    delay(100);
     ESP.restart();
   }
 #endif
 }
 
+// No Serial.flush() here: on the native USB CDC it waits for a host to read
+// the data, and with no computer attached the watchdog fires first.
 static void restartIfAsked() {
   if (!WebConfig_WantsRestart()) return;
   Serial.println("Restart requested");
-  Serial.flush();
-  delay(400);
+  delay(400);                       // let the HTTP reply leave the socket
   ESP.restart();
 }
 
