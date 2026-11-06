@@ -1,0 +1,16 @@
+# arduino-cli sketch profile - pins the core and library versions so the build
+# is reproducible.
+#   arduino-cli compile --profile default DevOpsDashboard
+#
+# WebServer, DNSServer, ESPmDNS, Update and Preferences come with the ESP32
+# core. The firmware version lives in Version.h, not here.
+profiles:
+  default:
+    fqbn: esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M,PartitionScheme=custom,CDCOnBoot=cdc,FlashMode=qio
+    platforms:
+      - platform: esp32:esp32 (3.3.10)
+    libraries:
+      - GFX Library for Arduino (1.6.9)
+      - ArduinoJson (7.4.3)
+
+default_profile: default
