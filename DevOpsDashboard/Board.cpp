@@ -51,11 +51,11 @@ struct QuietI2C {
 BoardModel Board_Detect() {
 #if BOARD_FORCE == 21
   s_model = BOARD_LCD_2_1;  s_detected = true;
-  Serial.println("Deska: 2.1 (vynuceno BOARD_FORCE)");
+  Serial.println("Board: 2.1 (forced by BOARD_FORCE)");
   return s_model;
 #elif BOARD_FORCE == 28
   s_model = BOARD_LCD_2_8C; s_detected = true;
-  Serial.println("Deska: 2.8C (vynuceno BOARD_FORCE)");
+  Serial.println("Board: 2.8C (forced by BOARD_FORCE)");
   return s_model;
 #else
 
@@ -78,7 +78,7 @@ BoardModel Board_Detect() {
     if (CST820_Probe()) {
       s_model = BOARD_LCD_2_1;
       s_detected = true;
-      Serial.println("Deska: ESP32-S3-Touch-LCD-2.1 (ST7701 + CST820)");
+      Serial.println("Board: ESP32-S3-Touch-LCD-2.1 (ST7701 + CST820)");
       return s_model;
     }
     delay(50);
@@ -96,7 +96,7 @@ BoardModel Board_Detect() {
   if (GT911_Reset() && GT911_Probe()) {
     s_model = BOARD_LCD_2_8C;
     s_detected = true;
-    Serial.printf("Deska: ESP32-S3-Touch-LCD-2.8C (ST7701 + GT911 na 0x%02X)\n",
+    Serial.printf("Board: ESP32-S3-Touch-LCD-2.8C (ST7701 + GT911 at 0x%02X)\n",
                   GT911_Address());
     return s_model;
   }
@@ -107,10 +107,10 @@ BoardModel Board_Detect() {
   // panel init looks like a hardware fault rather than a failed probe.
   s_model = BOARD_FALLBACK;
   s_detected = false;
-  Serial.printf("VAROVANI: dotykovy radic neodpovedel (ani CST820 na 0x%02X, ani "
-                "GT911 na 0x%02X/0x%02X).\n"
-                "          Pokracuji jako deska %s - pokud je to spatne, nastavte "
-                "BOARD_FORCE v Config.h.\n",
+  Serial.printf("WARNING: the touch controller did not answer (neither CST820 at 0x%02X nor "
+                "GT911 at 0x%02X/0x%02X).\n"
+                "         Continuing as board %s - if that is wrong, set "
+                "BOARD_FORCE in Config.h.\n",
                 CST820_ADDR, GT911_ADDR_MAIN, GT911_ADDR_ALT, Board_Name());
   return s_model;
 #endif

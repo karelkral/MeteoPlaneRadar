@@ -249,7 +249,7 @@ bool ST7701_Init() {
   buscfg.max_transfer_sz = 64;
   esp_err_t err = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
   if (err != ESP_OK) {
-    Serial.printf("FATAL: spi_bus_initialize selhalo (0x%x)\n", err);
+    Serial.printf("FATAL: spi_bus_initialize failed (0x%x)\n", err);
     return false;
   }
 
@@ -262,7 +262,7 @@ bool ST7701_Init() {
   devcfg.queue_size = 1;
   err = spi_bus_add_device(SPI2_HOST, &devcfg, &s_spi);
   if (err != ESP_OK) {
-    Serial.printf("FATAL: spi_bus_add_device selhalo (0x%x)\n", err);
+    Serial.printf("FATAL: spi_bus_add_device failed (0x%x)\n", err);
     return false;
   }
 
@@ -325,8 +325,8 @@ bool ST7701_Init() {
   err = esp_lcd_new_rgb_panel(&rgb, &panel_handle);
   if (err != ESP_OK || !panel_handle) {
     panel_handle = nullptr;
-    Serial.printf("FATAL: esp_lcd_new_rgb_panel selhalo (0x%x) - je PSRAM v IDE "
-                  "nastavena na OPI PSRAM?\n", err);
+    Serial.printf("FATAL: esp_lcd_new_rgb_panel failed (0x%x) - is PSRAM set "
+                  "to OPI PSRAM in the IDE?\n", err);
     return false;
   }
   esp_lcd_panel_reset(panel_handle);
@@ -375,7 +375,7 @@ void LCD_Flush(const uint16_t* fb) {
   uint32_t now = millis();
   if (now - tPrev >= 1000) {
     tPrev = now;
-    Serial.printf("FLUSH: min=%lu us  posl=%lu us  max=%lu us  (%lu/s, snimek ~34200 us)\n",
+    Serial.printf("FLUSH: min=%lu us  last=%lu us  max=%lu us  (%lu/s, frame ~34200 us)\n",
                   (unsigned long)mn, (unsigned long)last, (unsigned long)mx,
                   (unsigned long)cnt);
     mn = 0xFFFFFFFF; mx = 0; cnt = 0;

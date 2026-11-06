@@ -58,7 +58,7 @@ static void startAP() {
   WiFi.softAP(AP_SSID, pass);
   delay(200);
   s_ap = true;
-  Serial.printf("WiFi: pristupovy bod %s, http://%s/\n",
+  Serial.printf("WiFi: access point %s, http://%s/\n",
                 AP_SSID, WiFi.softAPIP().toString().c_str());
   WebConfig_Begin(true);
   WiFi_DrawApScreen();
@@ -92,7 +92,7 @@ static bool tryConnectSlot(int slot, uint32_t timeoutMs, bool show) {
     Watchdog_Feed();
     delay(100);
   }
-  Serial.printf("WiFi: pripojeni k %s se nepovedlo\n", ssid);
+  Serial.printf("WiFi: connecting to %s failed\n", ssid);
   return false;
 }
 
@@ -183,7 +183,7 @@ void WiFi_Loop() {
     for (int i = 0; i < WIFI_SLOTS; i++)
       if (i != s_slot && *Settings_WifiSsid((uint8_t)i)) others++;
     if (others > 0) {
-      Serial.println("WiFi: zkousim ostatni ulozene site");
+      Serial.println("WiFi: trying the other remembered networks");
       if (connectAny(false, -1, true)) return;
     }
     s_lostSince = millis();                // another full wait before the next round
@@ -192,7 +192,7 @@ void WiFi_Loop() {
 
   if (now - s_lastReconnect < 15000) return;
   s_lastReconnect = now;
-  Serial.println("WiFi: spojeni ztraceno, zkousim znovu");
+  Serial.println("WiFi: connection lost, retrying");
   WiFi.reconnect();
 }
 

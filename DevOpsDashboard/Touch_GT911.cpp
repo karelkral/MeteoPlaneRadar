@@ -86,7 +86,7 @@ bool GT911_Probe() {
     uint8_t id[4] = {};
     if (!readAt(cand[i], GT911_REG_PRODUCT_ID, id, 4)) continue;
     s_addr = cand[i];
-    Serial.printf("GT911 na 0x%02X, ID: %c%c%c%c\n", s_addr,
+    Serial.printf("GT911 at 0x%02X, ID: %c%c%c%c\n", s_addr,
                   isprint(id[0]) ? id[0] : '.', isprint(id[1]) ? id[1] : '.',
                   isprint(id[2]) ? id[2] : '.', isprint(id[3]) ? id[3] : '.');
     return true;
@@ -111,7 +111,7 @@ bool GT911_Init() {
   if (!s_addr) {
     GT911_Reset();
     if (!GT911_Probe()) {
-      Serial.println("GT911 nereaguje na I2C");
+      Serial.println("GT911 does not answer on I2C");
       return false;
     }
   }
@@ -155,7 +155,7 @@ void GT911_Read(TouchData* out) {
   if (!readRegs(GT911_REG_STATUS, &st, 1)) {
 #if TOUCH_DEBUG
     static unsigned long tErr = 0;
-    if (millis() - tErr > 1000) { tErr = millis(); Serial.println("GT911: cteni 0x814E selhalo"); }
+    if (millis() - tErr > 1000) { tErr = millis(); Serial.println("GT911: reading 0x814E failed"); }
 #endif
     return;                                          // standby - not a fault
   }
@@ -163,7 +163,7 @@ void GT911_Read(TouchData* out) {
   { static unsigned long tTick = 0; static uint32_t nPoll = 0; nPoll++;
     if (millis() - tTick > 1000) {
       tTick = millis();
-      Serial.printf("GT911: %lu cteni/s, posledni 0x814E=0x%02X, INT=%d\n",
+      Serial.printf("GT911: %lu reads/s, last 0x814E=0x%02X, INT=%d\n",
                     (unsigned long)nPoll, st, digitalRead(GT911_INT_PIN));
       nPoll = 0;
     } }
@@ -194,7 +194,7 @@ void GT911_Read(TouchData* out) {
   uint16_t y = (uint16_t)buf[2] | ((uint16_t)buf[3] << 8);
   if (x >= LCD_WIDTH || y >= LCD_HEIGHT) {
 #if TOUCH_DEBUG
-    Serial.printf("GT911: bod (%u,%u) je mimo panel %dx%d - zahozeno\n",
+    Serial.printf("GT911: point (%u,%u) is outside the panel %dx%d - dropped\n",
                   x, y, LCD_WIDTH, LCD_HEIGHT);
 #endif
     return;                                          // outside the panel

@@ -69,7 +69,7 @@ bool CST820_Init() {
     Serial.printf("CST820 ID: 0x%02X\n", id);
     return true;
   }
-  Serial.println("CST820 nereaguje na I2C");
+  Serial.println("CST820 does not answer on I2C");
   return false;
 }
 

@@ -50,7 +50,7 @@ bool TCA9554_SetPin(uint8_t pin, bool high) {
   if (writeReg(TCA9554_OUTPUT_REG, s_output)) return true;
   delay(2);
   if (writeReg(TCA9554_OUTPUT_REG, s_output)) return true;
-  Serial.println("TCA9554: zapis selhal");
+  Serial.println("TCA9554: write failed");
   return false;
 }
 
@@ -58,14 +58,14 @@ bool TCA9554_Verify() {
   bool ok = false;
   uint8_t now = readReg(TCA9554_OUTPUT_REG, &ok);
   if (!ok) {
-    Serial.println("TCA9554: expander neodpovida");
+    Serial.println("TCA9554: expander does not answer");
     return false;
   }
   if (now == s_output) return true;
   // The register drifted from what we last wrote. Either a write got corrupted
   // or the chip reset itself. Whatever the cause, some of those bits are the
   // display's power and reset - put them back.
-  Serial.printf("TCA9554: registr se rozesel (cteno 0x%02X, ocekavano 0x%02X), opravuji\n",
+  Serial.printf("TCA9554: register mismatch (read 0x%02X, expected 0x%02X), repairing\n",
                 now, s_output);
   writeReg(TCA9554_CONFIG_REG, 0x00);      // all pins outputs again
   writeReg(TCA9554_OUTPUT_REG, s_output);

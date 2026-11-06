@@ -131,23 +131,23 @@ long Net_ReadBody(HTTPClient& http, uint8_t* buf, size_t cap, const char* tag,
   int ret = http.writeToStream(&sink);
 
   if (sink.timedOut()) {
-    Serial.printf("%s: prenos prekrocil %lu ms, preruseno\n",
+    Serial.printf("%s: transfer exceeded %lu ms, aborted\n",
                   tag, (unsigned long)NET_BODY_BUDGET_MS);
     return -1;
   }
   if (sink.overflowed()) {
     // Deliberately fatal. A body that outgrew the buffer is a truncated body,
     // and half a JSON document or half a PNG is worse than no update at all.
-    Serial.printf("%s: odpoved presahla %u B, zahozeno\n", tag, (unsigned)cap);
+    Serial.printf("%s: response exceeded %u B, dropped\n", tag, (unsigned)cap);
     return -1;
   }
   if (ret < 0) {
-    Serial.printf("%s: writeToStream chyba %d (%s)\n", tag, ret,
+    Serial.printf("%s: writeToStream error %d (%s)\n", tag, ret,
                   HTTPClient::errorToString(ret).c_str());
     return -1;
   }
   if (!sink.terminate()) {
-    Serial.printf("%s: neni misto pro ukonceni retezce\n", tag);
+    Serial.printf("%s: no room for the string terminator\n", tag);
     return -1;
   }
   return (long)sink.length();
@@ -211,12 +211,12 @@ long Net_ScanBody(HTTPClient& http, NetScanFn cb, void* user, const char* tag,
   sink.finish();               // the last, partial window
 
   if (sink.timedOut()) {
-    Serial.printf("%s: prenos prekrocil %lu ms, preruseno\n",
+    Serial.printf("%s: transfer exceeded %lu ms, aborted\n",
                   tag, (unsigned long)NET_BODY_BUDGET_MS);
     return -1;
   }
   if (ret < 0) {
-    Serial.printf("%s: writeToStream chyba %d (%s)\n", tag, ret,
+    Serial.printf("%s: writeToStream error %d (%s)\n", tag, ret,
                   HTTPClient::errorToString(ret).c_str());
     return -1;
   }
@@ -226,7 +226,7 @@ long Net_ScanBody(HTTPClient& http, NetScanFn cb, void* user, const char* tag,
 bool Net_HeapOk(const char* tag) {
   size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (freeInt >= NET_MIN_HEAP) return true;
-  Serial.printf("%s: malo volne pameti (%u B < %u B), stahovani preskoceno\n",
+  Serial.printf("%s: low free memory (%u B < %u B), request skipped\n",
                 tag, (unsigned)freeInt, (unsigned)NET_MIN_HEAP);
   return false;
 }
