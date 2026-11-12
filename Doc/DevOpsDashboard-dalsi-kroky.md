@@ -2,6 +2,7 @@
 
 > Související dokumenty: [plán a dokumentace projektu](DevOpsDashboard-plan.md),
 > [výukový průvodce REST API](DevOpsDashboard-REST-API.md),
+> [podpora dalších desek](DevOpsDashboard-dalsi-desky.md),
 > [README firmwaru](../DevOpsDashboard/README.md).
 
 ## 1. Aktuální stav (firmware 0.1.0)
@@ -16,6 +17,7 @@
 | `DevOpsDashboard/README.md` | **necommitnuto** |
 | Fáze 6 (napojení REST API) | **nezačato** – návrh v [DevOpsDashboard-REST-API.md](DevOpsDashboard-REST-API.md) |
 | Deska 2.8C, 24h běh | neověřeno |
+| Další desky: Waveshare 4.3 (SKU 25948), SC01 Plus 3.5" | **analýza a plán** v [DevOpsDashboard-dalsi-desky.md](DevOpsDashboard-dalsi-desky.md), neimplementováno |
 
 ## 2. Prostředí (jednorázově, už je nainstalováno)
 
