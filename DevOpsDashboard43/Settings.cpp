@@ -249,15 +249,6 @@ bool Settings_SetApiProfile(uint8_t slot, const char* name, const char* baseUrl,
   storeProfile(slot);
   return true;
 }
-
-// Legacy single-URL access (v0.1.0 web page): the active profile's base URL.
-// Goes away with the profile editor of the web page (phase 43.10).
-const char* Settings_ApiUrl() { return s_prof[s_apiAct].baseUrl; }
-
-bool Settings_SetApiUrl(const char* url) {
-  const ApiProfile& p = s_prof[s_apiAct];
-  return Settings_SetApiProfile(s_apiAct, p.name, url, nullptr);
-}
 uint16_t Settings_ApiIntervalSec() { return s_apiInt; }
 void     Settings_SetApiIntervalSec(uint16_t s) {
   s_apiInt = clampInterval(s);
@@ -308,7 +299,6 @@ void Settings_ToJson(JsonObject o) {
     e["hasKey"]  = s_prof[i].key[0] != '\0';      // the key itself never leaves the device
   }
   o["apiActive"]      = s_apiAct;
-  o["apiUrl"]         = s_prof[s_apiAct].baseUrl;  // legacy, see Settings_ApiUrl()
   o["apiIntervalSec"] = s_apiInt;
   o["brightness"]     = s_bri;
   o["hasPassword"]    = Settings_HasAdminPassword();
@@ -316,10 +306,6 @@ void Settings_ToJson(JsonObject o) {
 
 bool Settings_FromJson(JsonObjectConst in) {
   bool changed = false;
-  if (!in["apiUrl"].isNull()) {
-    Settings_SetApiUrl(in["apiUrl"].as<const char*>());
-    changed = true;
-  }
   if (!in["apiIntervalSec"].isNull()) {
     Settings_SetApiIntervalSec(in["apiIntervalSec"].as<uint16_t>());
     changed = true;

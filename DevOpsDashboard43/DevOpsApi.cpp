@@ -145,16 +145,22 @@ static bool parseBody(const String& body, uint16_t out[5]) {
   return true;
 }
 
+// One request to the endpoint of a profile; false with *code set on any failure.
+static bool requestPoirot(const char* baseUrl, const char* key, uint16_t v[5], int* code) {
+  String url = String(baseUrl) + API_PATH_POIROT;
+  String body;
+  *code = 0;
+  bool ok = Net_GetString(url.c_str(), body, "API", API_KEY_HEADER, key, true, code);
+  if (ok && !parseBody(body, v)) { ok = false; *code = NET_CODE_BAD_BODY; }
+  return ok;
+}
+
 static bool fetchOnce(const ApiCfg& cfg) {
   setBusy(true);
-  String url = String(cfg.baseUrl) + API_PATH_POIROT;
-  String body;
   int code = 0;
-  const unsigned long t0 = millis();
-  bool ok = Net_GetString(url.c_str(), body, "API", API_KEY_HEADER, cfg.key, true, &code);
-
   uint16_t v[5] = {};
-  if (ok && !parseBody(body, v)) { ok = false; code = NET_CODE_BAD_BODY; }
+  const unsigned long t0 = millis();
+  bool ok = requestPoirot(cfg.baseUrl, cfg.key, v, &code);
   const unsigned long ms = millis() - t0;
 
   // The profile was switched while this request ran: the answer is stale.
@@ -193,12 +199,79 @@ static bool fetchOnce(const ApiCfg& cfg) {
   return !transient;
 }
 
+// --- Connection test ---------------------------------------------------------
+static char          s_testUrl[API_URL_MAX + 1];
+static char          s_testKey[API_KEY_MAX + 1];
+static bool          s_testReq = false;
+static ApiTestResult s_test;
+
+ApiTestResult DevOpsApi_GetTest() {
+  ApiTestResult t;
+  LOCK(); t = s_test; UNLOCK();
+  return t;
+}
+
+bool DevOpsApi_StartTest(uint8_t slot) {
+  if (slot >= API_PROFILES || !s_task) return false;
+  const ApiProfile& p = Settings_ApiProfile(slot);
+  bool started = false;
+  LOCK();
+  if (s_test.state != API_TEST_RUNNING) {
+    memset(&s_test, 0, sizeof(s_test));
+    s_test.slot = slot;
+    if (!p.baseUrl[0] || !p.key[0]) {
+      s_test.state = API_TEST_DONE;
+      copyStr(s_test.text, sizeof(s_test.text), p.baseUrl[0] ? "no API key" : "no URL");
+    } else {
+      copyStr(s_testUrl, sizeof(s_testUrl), p.baseUrl);
+      copyStr(s_testKey, sizeof(s_testKey), p.key);
+      s_test.state = API_TEST_RUNNING;
+      s_testReq = true;
+      started = true;
+    }
+    UNLOCK();
+    if (started) xTaskNotifyGive(s_task);
+    return true;
+  }
+  UNLOCK();
+  return false;
+}
+
+static void runTest() {
+  char url[API_URL_MAX + 1], key[API_KEY_MAX + 1];
+  LOCK();
+  copyStr(url, sizeof(url), s_testUrl);
+  copyStr(key, sizeof(key), s_testKey);
+  UNLOCK();
+
+  const bool wifi = WiFi.status() == WL_CONNECTED;
+  uint16_t v[5] = {};
+  int code = NET_CODE_NONE;
+  const bool ok = wifi && requestPoirot(url, key, v, &code);
+  char tmp[16];
+  const char* text = ok ? "OK" : errorText(code, wifi, tmp, sizeof(tmp));
+
+  LOCK();
+  s_test.ok = ok;
+  s_test.httpCode = code;
+  copyStr(s_test.text, sizeof(s_test.text), text);
+  s_test.total = v[0]; s_test.waiting = v[1]; s_test.running = v[2];
+  s_test.warning = v[3]; s_test.error = v[4];
+  s_test.state = API_TEST_DONE;
+  UNLOCK();
+  Serial.printf("API test: profile %u - %s (code %d)\n", (unsigned)s_test.slot + 1, text, code);
+}
+
 static void apiTask(void*) {
   uint32_t nextAt = 0;
   bool     logStack = true;
   bool     offlineShown = false;
   for (;;) {
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(500));
+
+    bool test;
+    LOCK(); test = s_testReq; s_testReq = false; UNLOCK();
+    if (test) runTest();
 
     ApiCfg cfg;
     bool changed, refresh;

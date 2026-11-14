@@ -120,11 +120,34 @@ static void handlePostConfig() {
     }
   }
 
-  // Validated here rather than silently ignored, so the page can say why.
-  JsonVariantConst au = doc["apiUrl"];
-  if (!au.isNull()) {
-    if (!Settings_SetApiUrl(au.as<const char*>())) { sendError(400, "apiUrl"); return; }
-    doc.remove("apiUrl");
+  // API profiles: {apiProfiles:[{name, baseUrl, key?}], apiActive}. A missing or
+  // empty key keeps the stored one. Validated here rather than silently ignored,
+  // so the page can say which profile was wrong.
+  JsonVariantConst profs = doc["apiProfiles"];
+  if (profs.is<JsonArrayConst>()) {
+    uint8_t slot = 0;
+    for (JsonVariantConst p : profs.as<JsonArrayConst>()) {
+      if (slot >= API_PROFILES) break;
+      const char* key = p["key"].as<const char*>();
+      if (key && !*key) key = nullptr;
+      if (!Settings_SetApiProfile(slot, p["name"].as<const char*>(),
+                                  p["baseUrl"].as<const char*>(), key)) {
+        char what[16];
+        snprintf(what, sizeof(what), "apiProfile%u", (unsigned)slot);
+        DevOpsApi_ApplySettings();               // earlier slots of this request are saved
+        sendError(400, what);
+        return;
+      }
+      slot++;
+    }
+  }
+  JsonVariantConst act = doc["apiActive"];
+  if (!act.isNull()) {
+    if (!act.is<int>() || act.as<int>() < 0 || act.as<int>() >= API_PROFILES) {
+      sendError(400, "apiActive");
+      return;
+    }
+    Settings_SetApiActive((uint8_t)act.as<int>());
   }
 
   Settings_FromJson(doc.as<JsonObjectConst>());
@@ -134,6 +157,41 @@ static void handlePostConfig() {
   JsonDocument res;
   res["ok"] = true;
   sendJson(200, res);
+}
+
+// Connection test of a stored profile: POST starts it (the request itself runs in
+// the API task and can take 20 s), GET reports the outcome.
+static void handleApiTestStart() {
+  JsonDocument doc;
+  if (!readBody(doc)) { sendError(400, "json"); return; }
+  JsonVariantConst slot = doc["slot"];
+  if (!slot.is<int>() || slot.as<int>() < 0 || slot.as<int>() >= API_PROFILES) {
+    sendError(400, "slot");
+    return;
+  }
+  if (!DevOpsApi_StartTest((uint8_t)slot.as<int>())) { sendError(409, "busy"); return; }
+  JsonDocument res;
+  res["ok"] = true;
+  sendJson(202, res);
+}
+
+static void handleApiTestResult() {
+  static const char* const STATE[] = { "idle", "running", "done" };
+  const ApiTestResult t = DevOpsApi_GetTest();
+  JsonDocument doc;
+  doc["state"] = STATE[t.state];
+  if (t.state == API_TEST_DONE) {
+    doc["slot"]     = t.slot;
+    doc["ok"]       = t.ok;
+    doc["httpCode"] = t.httpCode;
+    doc["text"]     = t.text;
+    if (t.ok) {
+      JsonObject d = doc["data"].to<JsonObject>();
+      d["total"] = t.total; d["running"] = t.running; d["waiting"] = t.waiting;
+      d["warning"] = t.warning; d["error"] = t.error;
+    }
+  }
+  sendJson(200, doc);
 }
 
 // Jump to a screen ({"index":n}) or step one along ({"step":-1|1}).
@@ -523,6 +581,8 @@ void WebConfig_Begin(bool apMode) {
   s_srv.on("/api/config", HTTP_GET, handleGetConfig);
   s_srv.on("/api/config", HTTP_POST, handlePostConfig);
   s_srv.on("/api/status", HTTP_GET, handleStatus);
+  s_srv.on("/api/apitest", HTTP_POST, handleApiTestStart);
+  s_srv.on("/api/apitest", HTTP_GET, handleApiTestResult);
   s_srv.on("/api/screen", HTTP_POST, handleScreen);
   s_srv.on("/api/scan", HTTP_GET, handleScan);
   s_srv.on("/api/wifi", HTTP_POST, handleWifi);

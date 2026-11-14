@@ -35,6 +35,9 @@ td:first-child{color:#888;width:35%}
 #msg.err{display:block;background:#411;color:#f88}
 a{color:#5bf}
 .hint{color:#777;font-size:12px;margin-top:4px}
+.prof{border-top:1px solid #2a2a2a;margin-top:12px;padding-top:2px}
+.res{font-size:13px;color:#aaa;margin-top:6px;min-height:1em}
+.res.ok{color:#8f8}.res.err{color:#f88}
 </style></head><body>
 <h1>DevOps Dashboard 4.3</h1>
 <div class="sub" id="sub">&nbsp;</div>
@@ -59,11 +62,13 @@ a{color:#5bf}
 
 <section id="secApi" style="display:none">
 <h2>DevOps API</h2>
-<label for="apiUrl">URL (http:// or https://, empty = off)</label>
-<input id="apiUrl" placeholder="http://192.168.1.10:5000/api/dashboard">
+<label for="apiActive">Active profile (its name is shown on the display)</label>
+<select id="apiActive"></select>
+<div id="profRows"></div>
 <label for="apiInt">Refresh interval [s]</label>
 <input id="apiInt" type="number" min="5" max="3600">
 <button id="bApi">Save</button>
+<div class="hint">Base URL of the API, without /IotDashboard/... The key stays on the device and is never shown again; leave the field empty to keep it. Clearing the URL removes the profile together with its key. Test uses the saved profile, so press Save first.</div>
 </section>
 
 <section id="secDisp" style="display:none">
@@ -106,14 +111,55 @@ function slotRow(i,w){
  const p=document.createElement("input");p.id="slP"+i;p.type="password";p.placeholder=w.hasPass?"(stored)":"password";
  d.append(s,p);return d;
 }
+function profRow(i,p){
+ const d=document.createElement("div");d.className="prof";
+ const mk=(label,id,type,ph,val)=>{
+  const l=document.createElement("label");l.htmlFor=id;l.textContent=label;
+  const e=document.createElement("input");e.id=id;e.type=type;e.placeholder=ph;e.value=val||"";
+  if(type=="password")e.autocomplete="new-password";
+  d.append(l,e);return e;};
+ mk("Profile "+(i+1)+" - name","apN"+i,"text","e.g. Production",p.name).maxLength=20;
+ mk("Base URL","apU"+i,"text","https://<api-host>/<Environment>",p.baseUrl);
+ mk("API key","apK"+i,"password",p.hasKey?"(stored)":"API key","");
+ const b=document.createElement("button");b.className="alt";b.textContent="Test";b.onclick=()=>testProfile(i);
+ const r=document.createElement("div");r.className="res";r.id="apR"+i;
+ d.append(b,r);return d;
+}
+function renderApi(){
+ const rows=$("profRows");rows.textContent="";
+ const sel=$("apiActive");sel.textContent="";
+ CFG.apiProfiles.forEach((p,i)=>{
+  rows.append(profRow(i,p));
+  const o=document.createElement("option");o.value=i;o.textContent=(i+1)+": "+(p.name||"(empty)");sel.append(o);
+ });
+ sel.value=CFG.apiActive;
+ $("apiInt").value=CFG.apiIntervalSec;
+ $("apiInt").min=CFG.apiIntervalMin;$("apiInt").max=CFG.apiIntervalMax;
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function testProfile(i){
+ const r=$("apR"+i);r.className="res";r.textContent="Testing...";
+ try{
+  await api("/api/apitest",{slot:i});
+  for(let k=0;k<30;k++){
+   await sleep(1000);
+   const j=await api("/api/apitest");
+   if(j.state!="done"||j.slot!=i)continue;
+   if(j.ok){const d=j.data;r.className="res ok";
+    r.textContent="OK, HTTP "+j.httpCode+": total "+d.total+" (running "+d.running+", waiting "+d.waiting+", warning "+d.warning+", error "+d.error+")";
+   }else{r.className="res err";r.textContent=j.text+(j.httpCode>0?" (HTTP "+j.httpCode+")":"");}
+   return;
+  }
+  r.className="res err";r.textContent="No answer within 30 s";
+ }catch(e){r.className="res err";r.textContent=e.message=="busy"?"Another test is still running":"Failed: "+e.message;}
+}
 async function load(){
  CFG=await api("/api/config");
  $("sub").textContent="v"+CFG.version+"  |  "+CFG.ip+(CFG.apMode?"  |  setup mode":"");
  if(CFG.apMode)return;
  for(const id of["secApi","secDisp","secSys"])$(id).style.display="";
  $("slots").style.display="";
- $("apiUrl").value=CFG.apiUrl;$("apiInt").value=CFG.apiIntervalSec;
- $("apiInt").min=CFG.apiIntervalMin;$("apiInt").max=CFG.apiIntervalMax;
+ renderApi();
  $("bri").value=CFG.brightness;$("briVal").textContent=CFG.brightness+" %";
  const rows=$("slotRows");rows.textContent="";
  CFG.wifi.forEach((w,i)=>rows.append(slotRow(i,w)));
@@ -151,9 +197,16 @@ $("bSlots").onclick=async()=>{
  try{await api("/api/wifilist",{nets:nets});msg("Networks saved",true);load();}catch(e){msg("Failed: "+e.message);}
 };
 $("bApi").onclick=async()=>{
- try{await api("/api/config",{apiUrl:$("apiUrl").value.trim(),apiIntervalSec:parseInt($("apiInt").value)||30});
+ const profiles=CFG.apiProfiles.map((_,i)=>{
+  const p={name:$("apN"+i).value.trim(),baseUrl:$("apU"+i).value.trim()};
+  const k=$("apK"+i).value.trim();if(k)p.key=k;return p;});
+ try{await api("/api/config",{apiProfiles:profiles,apiActive:parseInt($("apiActive").value)||0,
+   apiIntervalSec:parseInt($("apiInt").value)||30});
+  CFG=await api("/api/config");renderApi();
   msg("API settings saved",true);
- }catch(e){msg(e.message=="apiUrl"?"The URL has to start with http:// or https://":"Failed: "+e.message);}
+ }catch(e){
+  const m=/^apiProfile(\d)$/.exec(e.message);
+  msg(m?"Profile "+(+m[1]+1)+": the URL has to start with http:// or https://, the name is at most 20 characters, the key at most 128":"Failed: "+e.message);}
 };
 let briT;
 $("bri").oninput=()=>{const v=parseInt($("bri").value);$("briVal").textContent=v+" %";

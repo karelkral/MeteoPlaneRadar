@@ -44,3 +44,21 @@ void        DevOpsApi_Configure(const char* name, const char* baseUrl,
 
 void        DevOpsApi_RefreshNow();            // from anywhere; ignored while busy
 ApiSnapshot DevOpsApi_Get();                   // from anywhere; returns a copy
+
+// One-off connection test of a stored profile (the "Test" button of the web
+// page). Runs in the same task, one request at a time; the dashboard snapshot is
+// not touched. Poll DevOpsApi_GetTest() for the outcome.
+enum ApiTestState : uint8_t { API_TEST_IDLE, API_TEST_RUNNING, API_TEST_DONE };
+
+struct ApiTestResult {
+  ApiTestState state;
+  uint8_t      slot;
+  bool         ok;
+  int          httpCode;
+  char         text[48];                       // short reason, like ApiSnapshot::errorText
+  uint16_t     total, waiting, running, warning, error;
+};
+
+// From loop(). false = refused: a test is already running or the profile is incomplete.
+bool          DevOpsApi_StartTest(uint8_t slot);
+ApiTestResult DevOpsApi_GetTest();

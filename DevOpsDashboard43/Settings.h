@@ -54,10 +54,6 @@ bool        Settings_SetApiProfile(uint8_t slot, const char* name,
 uint16_t    Settings_ApiIntervalSec();
 void        Settings_SetApiIntervalSec(uint16_t s); // clamped to API_INTERVAL_S_MIN..MAX
 
-// Legacy single-URL access, acts on the active profile (until phase 43.10).
-const char* Settings_ApiUrl();
-bool        Settings_SetApiUrl(const char* url);
-
 // --- UI state (debounced writes) --------------------------------------------
 uint8_t Settings_Screen();
 void    Settings_SetScreen(uint8_t idx);
