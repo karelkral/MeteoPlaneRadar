@@ -19,7 +19,7 @@
 | Fáze 6 (napojení REST API) | **nezačato** – návrh v [DevOpsDashboard-REST-API.md](DevOpsDashboard-REST-API.md) |
 | Deska 2.8C, 24h běh | neověřeno |
 | Další desky: Waveshare 4.3 (SKU 25948), SC01 Plus 3.5" | **analýza a plán** v [DevOpsDashboard-dalsi-desky.md](DevOpsDashboard-dalsi-desky.md), neimplementováno |
-| Nový projekt `DevOpsDashboard43` (Waveshare 4.3 + LVGL 9) | **plán** v [DevOpsDashboard43-plan.md](DevOpsDashboard43-plan.md), fáze 0 (ověření HW a LVGL 9.6) hotová |
+| Nový projekt `DevOpsDashboard43` (Waveshare 4.3 + LVGL 9) | **firmware 0.1.0** v [DevOpsDashboard43](../DevOpsDashboard43/README.md), fáze 0–5 hotové, otevřené: občasné přerušení OTA – viz [plán](DevOpsDashboard43-plan.md) |
 
 ## 2. Prostředí (jednorázově, už je nainstalováno)
 

@@ -8,8 +8,10 @@
 > [plán napojení REST API](DevOpsDashboard43-REST-API-plan.md),
 > [README firmwaru 2.1](../DevOpsDashboard/README.md).
 >
-> Stav: **fáze 0 hotová** (ověření hardwaru a knihoven, [výsledky](#výsledky-fáze-0-14-11-2026)),
-> další fáze zatím neimplementovány. Plán vznikl 14. 11. 2026.
+> Stav: **fáze 0–5 hotové**, firmware 0.1.0 běží na desce ([README](../DevOpsDashboard43/README.md),
+> [programátorská dokumentace](DevOpsDashboard43-programatorska-dokumentace.md)).
+> **Otevřené:** OTA se občas přeruší ([K ŘEŠENÍ](#výsledky-fáze-5-14-11-2026)), neověřený výpadek
+> Wi-Fi a 24h běh. Plán vznikl 14. 11. 2026.
 
 Nový experimentální projekt `DevOpsDashboard43` pro desku **Waveshare ESP32-S3-Touch-LCD-4.3**
 (SKU 25948, 800×480). Grafiku obstará **LVGL 9**. Web, Wi-Fi portál a nastavení se převezmou
