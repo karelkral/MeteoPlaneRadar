@@ -302,6 +302,25 @@ instalací (neověřeno).
 > Do vyřešení: když OTA selže, zopakovat ji; deska zůstane funkční na staré verzi. Případně nahrát
 > přes USB (`build.cmd COM9`).
 
+**5.3 Testy na desce** (commit `Phase 43.5.3`)
+
+| Test | Výsledek |
+| --- | --- |
+| Displej, barvy, dotyk, plynulost (30 FPS, DIRECT) | OK |
+| Swipe Dashboard ↔ Clock, tečky, název v liště | OK |
+| Portál: vzhled, QR kód (telefon nabídne připojení), hledání sítí, připojení | OK (po opravě skenování ve fázi 4) |
+| Uložení Wi-Fi, automatické připojení po restartu, čas z NTP | OK |
+| Web a `/api/status`, `/api/config`, `/api/screen`, `/api/reboot` | OK; restart hlásí `software` |
+| Stmívání z webu 100 → 30 → 10 → 0 (podsvícení vypnuto) → 80 % | OK |
+| Zápis nastavení do NVS (flash) – rušení obrazu | žádné viditelné |
+| Přepnutí obrazovky z webu (s animací) | OK |
+| Tovární reset (RESET, do 1 s držet BOOT 3 s) | OK – nastavení smazána, naběhl portál |
+| Hlídání LVGL (testovací build) | OK – restart po 10 s |
+| OTA | funguje, ale **občas se přeruší** – viz „K ŘEŠENÍ“ výše |
+| Výpadek Wi-Fi (vypnutý router) | **neověřeno** |
+| 24h běh | **neověřeno** |
+| Hlídání panelu (zastavené snímání) | **neověřeno** – nelze uměle vyvolat |
+
 ### Fáze 6 – dokumentace
 
 `DevOpsDashboard43\README.md` (build, první start, web, otestováno), `CHANGELOG.md`, aktualizace
