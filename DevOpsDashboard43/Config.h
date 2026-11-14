@@ -45,10 +45,19 @@
 #define AP_PASSWORD ""     // "" = open network
 
 // ---------------------------------------------------------------------------
-//  DevOps REST API (stored in the settings; nothing fetches it yet)
+//  DevOps REST API (profiles and key are stored in the settings)
+//
+//  Three profiles (name, base URL, API key); the active one is chosen in the
+//  web UI. The firmware appends API_PATH_POIROT to the base URL.
 // ---------------------------------------------------------------------------
-#define API_URL_DEFAULT        ""     // empty = nothing is fetched
-#define API_URL_MAX            200
+#define API_PROFILES           3
+#define API_PROFILE_NAME_MAX   20
+#define API_URL_MAX            200          // base URL
+#define API_KEY_MAX            128
+#define API_PATH_POIROT        "/IotDashboard/PoirotComputers"
+#define API_KEY_HEADER         "X-Api-Key"  // ApiHeaderNames.ApiKey on the server
+#define API_STALE_FACTOR       3            // data older than 3 intervals = stale
+#define API_TASK_STACK         8192
 #define API_INTERVAL_S_DEFAULT 30
 #define API_INTERVAL_S_MIN     5
 #define API_INTERVAL_S_MAX     3600
@@ -68,6 +77,12 @@
 // Upper bound for the TLS handshake, in seconds (the default is 120 s, far over
 // the watchdog).
 #define NET_TLS_HANDSHAKE_S 8
+
+// 1 = do not verify the server certificate. Emergency switch only, for the case
+// that the CA bundle of the core lacks the CA a CDN started to use.
+#ifndef NET_TLS_INSECURE
+#define NET_TLS_INSECURE 0
+#endif
 
 // Wall-clock ceiling for receiving one body.
 #define NET_BODY_BUDGET_MS 15000UL

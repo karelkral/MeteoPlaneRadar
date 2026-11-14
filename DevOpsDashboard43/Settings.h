@@ -33,12 +33,30 @@ uint8_t Settings_Backlight();
 void    Settings_SetBacklight(uint8_t pct);      // debounced write
 
 // --- DevOps REST API --------------------------------------------------------
-const char* Settings_ApiUrl();                   // "" = nothing is fetched
-// Accepts only "http://..." / "https://..." (or "" to switch off), at most
-// API_URL_MAX characters. Returns false when the value was refused.
-bool        Settings_SetApiUrl(const char* url);
+// Up to API_PROFILES server profiles (e.g. one per environment); the active one
+// is what the dashboard fetches. The key is write-only for the outside world:
+// the web page only learns whether one is stored.
+struct ApiProfile {                       // read-only from outside
+  char name[API_PROFILE_NAME_MAX + 1];
+  char baseUrl[API_URL_MAX + 1];          // without the endpoint path
+  char key[API_KEY_MAX + 1];
+};
+
+const ApiProfile& Settings_ApiProfile(uint8_t slot);
+uint8_t     Settings_ApiActive();                       // 0..API_PROFILES-1
+void        Settings_SetApiActive(uint8_t slot);
+// key == nullptr keeps the stored key; an empty baseUrl clears the slot (key
+// included). The base URL is trimmed, a trailing '/' and a pasted
+// API_PATH_POIROT are removed. Returns false when refused: the URL does not
+// start with http:// / https://, or a value is too long.
+bool        Settings_SetApiProfile(uint8_t slot, const char* name,
+                                   const char* baseUrl, const char* key);
 uint16_t    Settings_ApiIntervalSec();
 void        Settings_SetApiIntervalSec(uint16_t s); // clamped to API_INTERVAL_S_MIN..MAX
+
+// Legacy single-URL access, acts on the active profile (until phase 43.10).
+const char* Settings_ApiUrl();
+bool        Settings_SetApiUrl(const char* url);
 
 // --- UI state (debounced writes) --------------------------------------------
 uint8_t Settings_Screen();

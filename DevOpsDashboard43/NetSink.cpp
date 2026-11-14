@@ -146,10 +146,8 @@ long Net_ReadBody(HTTPClient& http, uint8_t* buf, size_t cap, const char* tag,
                   HTTPClient::errorToString(ret).c_str());
     return -1;
   }
-  if (!sink.terminate()) {
-    Serial.printf("%s: no room for the string terminator\n", tag);
-    return -1;
-  }
+  // The sink was given cap - 1 bytes, so the last byte of buf is always free.
+  buf[sink.length()] = '\0';
   return (long)sink.length();
 }
 

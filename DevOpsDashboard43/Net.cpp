@@ -22,14 +22,26 @@ void Net_SetPollFn(void (*fn)()) { s_poll = fn; }
 static inline void poll() { if (s_poll) s_poll(); }
 
 // Collect the Date header on every request - a fallback for the clock when
-// SNTP is blocked (see Clock.h).
-static const char* DATE_HDR[] = { "Date" };
+// SNTP is blocked (see Clock.h). Content-Type tells an API from a web page.
+static const char* DATE_HDR[]  = { "Date" };
+static const char* RESP_HDRS[] = { "Date", "Content-Type" };
+
+// Verifies the server certificate against the CA bundle that ships with the
+// core (no certificate has to be pinned, so a CDN switching CA keeps working).
+// The core is built without time checks, so this works before the clock is set.
+static void tlsSetup(WiFiClientSecure& c) {
+#if NET_TLS_INSECURE
+  c.setInsecure();
+#else
+  c.useBuiltinCACertBundle();
+#endif
+  c.setHandshakeTimeout(NET_TLS_HANDSHAKE_S);
+}
 
 void Net_SessionBegin() {
   if (s_sess) return;
   s_sess = new WiFiClientSecure();
-  if (s_sess) { s_sess->setInsecure();
-                s_sess->setHandshakeTimeout(NET_TLS_HANDSHAKE_S); }
+  if (s_sess) tlsSetup(*s_sess);
 }
 
 void Net_SessionEnd() {
@@ -53,8 +65,11 @@ static bool txtReserve(size_t need) {
   return true;
 }
 
-bool Net_GetString(const char* url, String& out, const char* tag) {
+bool Net_GetString(const char* url, String& out, const char* tag,
+                   const char* hdrName, const char* hdrValue,
+                   bool requireJson, int* httpCode) {
   out = "";
+  if (httpCode) *httpCode = NET_CODE_NONE;
   if (WiFi.status() != WL_CONNECTED) return false;
 
   // Plain http:// endpoints exist too - ip-api.com serves TLS to paying users
@@ -66,7 +81,7 @@ bool Net_GetString(const char* url, String& out, const char* tag) {
 
   WiFiClient       plain;
   WiFiClientSecure secure;
-  if (tls) { secure.setInsecure(); secure.setHandshakeTimeout(NET_TLS_HANDSHAKE_S); }
+  if (tls) tlsSetup(secure);
   WiFiClient& client = tls ? static_cast<WiFiClient&>(secure)
                            : static_cast<WiFiClient&>(plain);
 
@@ -75,9 +90,11 @@ bool Net_GetString(const char* url, String& out, const char* tag) {
   http.setTimeout(10000);
   http.setReuse(false);
   if (!http.begin(client, url)) { Serial.printf("%s: begin() failed\n", tag); return false; }
-  http.collectHeaders(DATE_HDR, 1);
+  http.collectHeaders(RESP_HDRS, 2);
+  if (hdrName && *hdrName && hdrValue) http.addHeader(hdrName, hdrValue);
 
   int code = http.GET();
+  if (httpCode) *httpCode = code;
   if (code != HTTP_CODE_OK) {
     Serial.printf("%s: HTTP %d\n", tag, code);
     // Say what was asked and what the server said about it. A bare "HTTP 404"
@@ -93,14 +110,26 @@ bool Net_GetString(const char* url, String& out, const char* tag) {
   }
   if (http.hasHeader("Date")) Clock_NoteHttpDate(http.header("Date").c_str());
 
+  // The address of a web front end answers 200 text/html just like the API
+  // would - only the Content-Type tells them apart.
+  if (requireJson && http.header("Content-Type").indexOf("json") < 0) {
+    Serial.printf("%s: HTTP 200, but Content-Type is \"%s\"\n",
+                  tag, http.header("Content-Type").c_str());
+    if (httpCode) *httpCode = NET_CODE_NOT_JSON;
+    http.end();
+    return false;
+  }
+
   int declared = http.getSize();               // -1 when chunked / unknown
   if (declared > (int)NET_MAX_TEXT) {
     Serial.printf("%s: response %d B, limit is %u B\n",
                   tag, declared, (unsigned)NET_MAX_TEXT);
+    if (httpCode) *httpCode = NET_CODE_BAD_BODY;
     http.end();
     return false;
   }
   if (!txtReserve((declared > 0) ? (size_t)declared + 1 : NET_MAX_TEXT)) {
+    if (httpCode) *httpCode = NET_CODE_BAD_BODY;
     http.end();
     return false;
   }
@@ -109,7 +138,11 @@ bool Net_GetString(const char* url, String& out, const char* tag) {
   http.end();
   poll();
 
-  if (len <= 0) { Serial.printf("%s: empty response\n", tag); return false; }
+  if (len <= 0) {
+    Serial.printf("%s: empty response\n", tag);
+    if (httpCode) *httpCode = NET_CODE_BAD_BODY;
+    return false;
+  }
   out = s_txt;
   return true;
 }
@@ -128,7 +161,7 @@ bool Net_GetBinary(const char* url, uint8_t* buf, size_t cap, size_t* outLen,
 
   WiFiClientSecure  own;
   WiFiClientSecure& client = sess ? *s_sess : own;
-  if (!sess) { own.setInsecure(); own.setHandshakeTimeout(NET_TLS_HANDSHAKE_S); }
+  if (!sess) tlsSetup(own);
 
   HTTPClient http;
   http.setConnectTimeout(6000);
