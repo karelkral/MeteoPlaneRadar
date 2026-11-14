@@ -35,6 +35,14 @@ void LvPort_SetBacklight(bool on);
 // millis() of the last completed lv_timer_handler() pass - for a watchdog.
 uint32_t LvPort_LastBeatMs();
 
+// How long ago that was, in ms. Safe against the LVGL task updating the time
+// between the caller's millis() and this read (0 instead of a wrap-around).
+uint32_t LvPort_BeatAgeMs();
+
+// Frames the RGB peripheral has sent to the panel since boot (~39 per second).
+// Stops moving when the panel stops scanning - for a watchdog.
+uint32_t LvPort_FrameCount();
+
 lv_display_t* LvPort_Display();
 
 // Stop the RGB panel, then restart. A plain ESP.restart() hangs on this board

@@ -181,6 +181,10 @@ static void handleStatus() {
   doc["heap"]  = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   doc["heapLargest"] = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   doc["psram"] = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+  // Display health: ms since the LVGL task last finished a pass (normally a few
+  // dozen) and frames sent to the panel since boot (grows by ~39 a second).
+  doc["lvglAgeMs"] = LvPort_BeatAgeMs();
+  doc["frames"]    = LvPort_FrameCount();
   doc["resetReason"] = resetReason();
 
   if (Clock_TimeValid()) {

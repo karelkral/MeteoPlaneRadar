@@ -28,12 +28,15 @@ static lv_display_t*         s_disp;
 static SemaphoreHandle_t     s_mutex;
 static TaskHandle_t volatile s_task;
 static volatile uint32_t     s_beatMs;
+static volatile uint32_t     s_frames;
 
 static uint32_t tickCb() { return millis(); }
 
-// End of a frame (ISR). Wakes the LVGL task waiting in flushCb(). It fires on
-// every frame; flushCb() drops the counts that piled up before it waited.
+// End of a frame (ISR). Counts the frame for the display watchdog and wakes
+// the LVGL task waiting in flushCb(). It fires on every frame; flushCb() drops
+// the counts that piled up before it waited.
 IRAM_ATTR static bool frameDoneIsr(void*) {
+  s_frames = s_frames + 1;
   BaseType_t woken = pdFALSE;
   if (s_task) vTaskNotifyGiveFromISR(s_task, &woken);
   return woken == pdTRUE;
@@ -165,6 +168,13 @@ void LvPort_SetBacklight(bool on) {
 }
 
 uint32_t LvPort_LastBeatMs() { return s_beatMs; }
+
+uint32_t LvPort_BeatAgeMs() {
+  const int32_t age = (int32_t)(millis() - s_beatMs);
+  return age > 0 ? (uint32_t)age : 0;
+}
+
+uint32_t LvPort_FrameCount() { return s_frames; }
 
 lv_display_t* LvPort_Display() { return s_disp; }
 

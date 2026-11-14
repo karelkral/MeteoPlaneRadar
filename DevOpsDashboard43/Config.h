@@ -82,6 +82,20 @@
 // ---------------------------------------------------------------------------
 #define WDT_TIMEOUT_S 20       // loop() stuck this long = reboot
 
+// loop() restarts the board when the LVGL task has not finished a pass for
+// LVGL_WD_STALL_MS, or the RGB panel has not finished a frame for
+// PANEL_WD_STALL_MS (black or frozen picture while the sketch still runs).
+// Both pause during a firmware upload and for LVGL_WD_STALL_MS after it.
+#define DISPLAY_WD        1    // 0 = do not watch the display at all
+#define LVGL_WD_STALL_MS  10000UL
+#define PANEL_WD_STALL_MS 3000UL
+
+// 1 = test build: 60 s after boot loop() takes the LVGL lock and keeps it,
+// which must end in a restart by the watchdog above. Never ship with 1.
+#ifndef DOD43_WD_TEST
+#define DOD43_WD_TEST 0
+#endif
+
 // ---------------------------------------------------------------------------
 //  Web configuration server
 // ---------------------------------------------------------------------------

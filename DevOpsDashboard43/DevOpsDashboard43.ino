@@ -113,6 +113,42 @@ static void handleScreenChanges() {
   }
 }
 
+// The task watchdog only sees loop(). A stuck LVGL task (frozen picture, dead
+// touch) or an RGB peripheral that stopped scanning (black screen) leaves
+// loop() running, so both are watched from here.
+static void displayWatchdog() {
+#if DISPLAY_WD
+  static unsigned long lastBusy = 0;
+  static uint32_t lastFrames = 0;
+  static unsigned long framesMovedAt = 0;
+  const unsigned long now = millis();
+
+  // A firmware upload holds the LVGL lock and may stall the panel on purpose.
+  if (WebConfig_UpdateBusy()) { lastBusy = now; return; }
+  if (lastBusy && now - lastBusy < LVGL_WD_STALL_MS) { framesMovedAt = now; return; }
+
+  const uint32_t frames = LvPort_FrameCount();
+  if (frames != lastFrames || framesMovedAt == 0) {
+    lastFrames = frames;
+    framesMovedAt = now;
+  }
+  const char* why = nullptr;
+  unsigned long stalled = 0;
+  const uint32_t beatAge = LvPort_BeatAgeMs();
+  if (beatAge >= LVGL_WD_STALL_MS) {
+    why = "LVGL task stuck";
+    stalled = beatAge;
+  } else if (now - framesMovedAt >= PANEL_WD_STALL_MS) {
+    why = "panel stopped scanning";
+    stalled = now - framesMovedAt;
+  }
+  if (!why) return;
+  Serial.printf("DISPLAY WATCHDOG: %s for %lu ms - restarting\n", why, stalled);
+  delay(100);
+  LvPort_Restart();
+#endif
+}
+
 static void logHeap() {
   static unsigned long last = 0;
   if (last && millis() - last < HEAP_LOG_PERIOD_MS) return;
@@ -151,12 +187,23 @@ void setup() {
 }
 
 void loop() {
+  displayWatchdog();
+
   // A firmware upload owns the machine; WebConfig holds the LVGL lock meanwhile.
   if (WebConfig_UpdateBusy()) {
     WebConfig_Loop();
     delay(1);
     return;
   }
+
+#if DOD43_WD_TEST
+  static bool s_wdTestLocked = false;
+  if (!s_wdTestLocked && millis() > 60000) {
+    s_wdTestLocked = true;
+    Serial.println("WD TEST: holding the LVGL lock - expect a watchdog restart");
+    LvPort_Lock();
+  }
+#endif
 
   WiFi_Loop();                // may accept credentials and leave the access point
   WebConfig_Loop();
