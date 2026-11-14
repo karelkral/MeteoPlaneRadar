@@ -37,6 +37,11 @@ uint32_t LvPort_LastBeatMs();
 
 lv_display_t* LvPort_Display();
 
+// Stop the RGB panel, then restart. A plain ESP.restart() hangs on this board
+// while the panel's DMA keeps reading PSRAM, and only the RTC watchdog gets it
+// out (reset reason "WATCHDOG"). Never returns; drawing stops for good.
+[[noreturn]] void LvPort_Restart();
+
 // Scoped lock: { LvLock lock; lv_label_set_text(...); }
 class LvLock {
 public:

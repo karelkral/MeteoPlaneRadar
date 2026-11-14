@@ -167,3 +167,13 @@ void LvPort_SetBacklight(bool on) {
 uint32_t LvPort_LastBeatMs() { return s_beatMs; }
 
 lv_display_t* LvPort_Display() { return s_disp; }
+
+void LvPort_Restart() {
+  // The lock is never given back, so the LVGL task cannot draw into the frame
+  // buffers that del() frees. Bounded wait: restart even if LVGL is stuck.
+  const bool locked = LvPort_Lock(1000);
+  if (s_backlight) s_backlight->off();
+  if (locked && s_lcd) s_lcd->del();
+  ESP.restart();
+  for (;;) {}
+}

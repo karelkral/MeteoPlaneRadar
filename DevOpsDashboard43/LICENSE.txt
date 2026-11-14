@@ -40,6 +40,7 @@ licenses, which apply to any binary you build and distribute.
 - ESP32_Display_Panel (Espressif) - Apache-2.0
 - ESP32_IO_Expander (Espressif) - Apache-2.0
 - esp-lib-utils (Espressif) - Apache-2.0
+- ArduinoJson (bblanchon) - MIT
 
 All of them are permissively licensed. Apache-2.0 asks you to keep its notice
 when you redistribute the libraries' code.

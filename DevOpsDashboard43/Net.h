@@ -1,0 +1,36 @@
+// =============================================================================
+//  DevOpsDashboard43 (from DevOpsDashboard, based on MeteoPlaneRadar by chiptron.cz)
+//  One place for "fetch this URL and hand me the body".
+//
+//  Every request needs the same things: a check that there is enough internal
+//  RAM for a TLS handshake (https:// only), an insecure TLS client (no
+//  certificate pinning), the response as a complete string rather than a
+//  stream, and the "Date" header fed to the clock on the way past.
+// =============================================================================
+#pragma once
+#include <Arduino.h>
+
+// GET the URL and put the whole body in `out`.
+//   tag - short name for the serial log ("PREDPOVED", "RAINVIEWER", ...)
+// Returns false on no link, not enough heap, a non-200 status or an empty body;
+// the reason is printed once, so a caller can just retry later.
+bool Net_GetString(const char* url, String& out, const char* tag);
+
+// GET the URL into a caller-supplied buffer - for binary payloads (PNG tiles)
+// where a String would double the memory needed.
+// On success *outLen holds the number of bytes written.
+bool Net_GetBinary(const char* url, uint8_t* buf, size_t cap, size_t* outLen,
+                   const char* tag);
+
+// --- Keep-alive session -----------------------------------------------------
+//
+// A TLS handshake needs ~45 kB of internal RAM, which the device does not
+// reliably have while the web server is running - so a burst of one handshake
+// per radar tile ended up with tiles refused by the heap guard and drawn black.
+// Between Begin and End, Net_GetBinary reuses a single connection. Always pair
+// them: an open session holds its buffers until closed.
+void Net_SessionBegin();
+void Net_SessionEnd();
+
+// Called from loop() while a long transfer runs, so the watchdog stays fed.
+void Net_SetPollFn(void (*fn)());

@@ -20,5 +20,6 @@ profiles:
       - ESP32_Display_Panel (1.0.4)
       - ESP32_IO_Expander (1.1.1)
       - esp-lib-utils (0.2.3)
+      - ArduinoJson (7.4.3)
 
 default_profile: default
