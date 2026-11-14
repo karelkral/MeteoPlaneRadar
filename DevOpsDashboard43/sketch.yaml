@@ -1,0 +1,24 @@
+# arduino-cli sketch profile - pins the core and library versions so the build
+# is reproducible.
+#   arduino-cli compile --profile default DevOpsDashboard43
+#
+# Always build through this profile (build.cmd does): arduino-cli installs the
+# pinned core and libraries into Arduino15\internal and uses those instead of
+# whatever is installed globally.
+#
+# esp-lib-utils must stay below 0.3.0 - ESP32_Display_Panel 1.0.4 requires
+# ">=0.2.0 && <0.3.0".
+# WebServer, DNSServer, ESPmDNS, Update and Preferences come with the ESP32
+# core. The firmware version lives in Version.h, not here.
+profiles:
+  default:
+    fqbn: esp32:esp32:waveshare_esp32_s3_touch_lcd_43:PSRAM=enabled,FlashSize=16M,FlashMode=qio,PartitionScheme=custom
+    platforms:
+      - platform: esp32:esp32 (3.3.12)
+    libraries:
+      - lvgl (9.6.0)
+      - ESP32_Display_Panel (1.0.4)
+      - ESP32_IO_Expander (1.1.1)
+      - esp-lib-utils (0.2.3)
+
+default_profile: default
