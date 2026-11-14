@@ -10,6 +10,9 @@ Tento dokument vysvětluje:
 > síťovou vrstvu (`Net_GetString`). Modul, který API skutečně volá a kreslí data
 > (`DevOpsApi.cpp` + úprava `ScreenDashboard.cpp`), je **fáze 6** a zatím není napsaný.
 > Tento dokument popisuje jeho návrh.
+>
+> Pro Waveshare 7" s LVGL je doporučena varianta, kde se API stahuje ve vlastním FreeRTOS
+> tasku: [DevOpsDashboard-doporuceni-LVGL.md](DevOpsDashboard-doporuceni-LVGL.md), kap. 4.
 
 ---
 

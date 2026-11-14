@@ -3,6 +3,7 @@
 > Související dokumenty: [plán a dokumentace projektu](DevOpsDashboard-plan.md),
 > [stav a další kroky](DevOpsDashboard-dalsi-kroky.md),
 > [výukový průvodce REST API](DevOpsDashboard-REST-API.md),
+> [doporučení: Waveshare 7" + LVGL v Arduinu](DevOpsDashboard-doporuceni-LVGL.md),
 > [README firmwaru](../DevOpsDashboard/README.md).
 >
 > Stav: **analýza a plán**, nic z toho zatím není implementováno.
