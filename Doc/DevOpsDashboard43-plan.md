@@ -7,7 +7,8 @@
 > [výukový průvodce REST API](DevOpsDashboard-REST-API.md),
 > [README firmwaru 2.1](../DevOpsDashboard/README.md).
 >
-> Stav: **plán**, zatím nic neimplementováno. Vznikl 14. 11. 2026.
+> Stav: **fáze 0 hotová** (ověření hardwaru a knihoven, [výsledky](#výsledky-fáze-0-14-11-2026)),
+> další fáze zatím neimplementovány. Plán vznikl 14. 11. 2026.
 
 Nový experimentální projekt `DevOpsDashboard43` pro desku **Waveshare ESP32-S3-Touch-LCD-4.3**
 (SKU 25948, 800×480). Grafiku obstará **LVGL 9**. Web, Wi-Fi portál a nastavení se převezmou
@@ -19,8 +20,8 @@ z [DevOpsDashboard](../DevOpsDashboard). Kompatibilita s kulatými deskami 2.1 /
 | Oblast | Rozhodnutí |
 | --- | --- |
 | Umístění | nová složka `DevOpsDashboard43\` vedle `DevOpsDashboard\`, ta zůstane beze změny |
-| Prostředí | Arduino (arduino-cli z Arduino IDE), esp32 core **3.3.12** |
-| Grafika | **LVGL 9.6.0** (nejnovější), displej a dotyk obslouží **ESP32_Display_Panel 1.0.4** |
+| Prostředí | Arduino (arduino-cli z Arduino IDE), esp32 core **3.3.12**, build **jen přes profil** `sketch.yaml` ([proč](#výsledky-fáze-0-14-11-2026)) |
+| Grafika | **LVGL 9.6.0** (nejnovější), displej a dotyk obslouží **ESP32_Display_Panel 1.0.4**, režim vykreslování **DIRECT** se 2 framebuffery |
 | Převzetí kódu | **kopie** modulů z `DevOpsDashboard` (nezávislý experiment, žádná společná knihovna) |
 | Obrazovky | 2, přepínání **swipem**: **Dashboard** a **Hodiny**; aktivní obrazovku ukazují tečky |
 | Dashboard | jen **prstencový graf** jako minule: výsledky pipelines za 24 h, součet uprostřed, procenta na výsečích, legenda s počty. **Testovací data.** |
@@ -42,6 +43,7 @@ z [DevOpsDashboard](../DevOpsDashboard). Kompatibilita s kulatými deskami 2.1 /
 | arduino-cli | 1.5.1, přibalené k Arduino IDE | `arduino-cli version` |
 | Core | esp32 **3.3.12**, obsahuje desku *Waveshare ESP32-S3-Touch-LCD-4.3* | `arduino-cli core list`, `boards.txt` |
 | sdkconfig core | `CONFIG_LCD_RGB_RESTART_IN_VSYNC=1`, XIP z PSRAM **vypnuté** | `esp32s3-libs\3.3.12\*\sdkconfig.h` |
+| Globální toolchain 3.3.12 | **poškozený**: složka `Arduino15\packages\esp32\tools\esp-x32\2601\xtensa-esp-elf\bin` (obsahuje `as.exe`) je pro Windows „poškozená a nečitelná“ | build skončil chybou `cannot execute 'as'` |
 
 Parametry displeje, dotyku a expandéru CH422G jsou v
 [podpoře dalších desek, kap. 3](DevOpsDashboard-dalsi-desky.md#3-waveshare-esp32-s3-touch-lcd-43-sku-25948).
@@ -105,7 +107,7 @@ Web nikdy nekreslí přímo.
 | `tools/gen_fonts.cmd` | nový | reprodukovatelné generování fontů (`npx lv_font_conv`) |
 | `Settings`, `WiFiPortal`, `WebConfig`, `WebPage.h`, `Net`, `NetSink`, `Clock`, `TimeUtil`, `Status`, `Watchdog`, `Version.h`, `Config.h` | kopie | kreslení nahradit voláním `Ui_*()`; zbytek beze změny |
 | `partitions.csv` | kopie | 16 MB, 2× 6 MB aplikace (OTA) |
-| `sketch.yaml`, `build.cmd`, `README.md`, `CHANGELOG.md`, `LICENSE.txt`, `.gitignore` | kopie / úprava | nový FQBN, port COM9, připnuté verze |
+| `sketch.yaml`, `build.cmd`, `README.md`, `CHANGELOG.md`, `LICENSE.txt`, `.gitignore` | kopie / úprava | nový FQBN, port COM9, připnuté verze, build přes `--profile` |
 
 **Nepřevádí se:** `Display_ST7701`, `Canvas16`, `AAFont`, `ClockFonts.h`, `Layout`, `UI`, `Board`,
 `TCA9554`, `Touch*`, `qrcode.c/.h`. Nahradí je ESP32_Display_Panel a LVGL.
@@ -146,29 +148,55 @@ s 11 znaky vyjde asi na 40 kB).
 ### Fáze 0 – prostředí a ověření hardwaru (bez vlastního kódu)
 
 1. Nainstalovat knihovny:
-   `arduino-cli lib install "lvgl@9.6.0" "ESP32_Display_Panel@1.0.4" "ESP32_IO_Expander@1.1.1" "esp-lib-utils@0.2.0"`
-   (u `esp-lib-utils` vybrat nejvyšší 0.2.x, kterou index nabízí).
+   `arduino-cli lib install "esp-lib-utils@0.2.3" "ESP32_IO_Expander@1.1.1" "ESP32_Display_Panel@1.0.4" "lvgl@9.6.0"`
 2. Stáhnout `10_lvgl_v9_demo` do dočasné složky mimo repozitář, přeložit s FQBN z kap. 1 a nahrát na COM9.
-3. Ověřit: obraz bez posunu a blikání, dotyk (`lv_demo_widgets`), výpis na COM9, volnou interní RAM
-   a PSRAM.
+3. Ověřit: obraz bez posunu a blikání, dotyk, výpis na COM9, volnou interní RAM a PSRAM.
 4. Zjistit, kde musí ležet `lv_conf.h` a `esp_panel_board_supported_conf.h`, aby je viděly knihovny.
-   Cíl: obojí ve složce sketche a předat přes `--build-property` (`-DLV_CONF_INCLUDE_SIMPLE -I<sketch>`)
-   v `build.cmd`. Pro Arduino IDE popsat náhradní postup v README.
 5. Při potížích s LVGL 9.6.0 zopakovat s 9.5.0 a výsledek zapsat sem.
 
 **Výstup:** ověřená sada verzí. Nic se necommituje kromě případné opravy tohoto plánu.
 
+#### Výsledky fáze 0 (14. 11. 2026)
+
+| Bod | Výsledek |
+| --- | --- |
+| Verze | **core 3.3.12 + lvgl 9.6.0 + ESP32_Display_Panel 1.0.4 + ESP32_IO_Expander 1.1.1 + esp-lib-utils 0.2.3 fungují.** Záloha 9.5.0 není potřeba. |
+| Build | Globální toolchain je poškozený (kap. 1), a proto build s globální instalací skončil `cannot execute 'as'`. **Build přes profil** (`arduino-cli compile --profile default`) si core i knihovny rozbalí do `Arduino15\internal\`, kde je toolchain `esp-x32 2601` v pořádku. Proto se bude **vždy překládat přes profil**. První build trval 14 min (instalace core), další asi 1 min. |
+| Konfigurace | `lv_conf.h` i `esp_panel_board_supported_conf.h` stačí dát **do složky sketche**. Core přidává `-I{build.source.path}` i knihovnám a LVGL i ESP32_Display_Panel konfiguraci hledají přes `__has_include`. `--build-property` ani kopie do `libraries\` nejsou potřeba. |
+| Inicializace desky | `Board (Waveshare:ESP32-S3-Touch-LCD-4.3)` – init i begin OK, CH422G OK, GT911 OK (varování „Unable to initialize the I2C address“ je neškodné, dotyk funguje) |
+| Displej, barvy, dotyk | OK: pořadí barev sedí, souřadnice dotyku odpovídají |
+| Výkon, režim **FULL** (adaptér Waveshare) | **9 FPS, 97 % CPU**, pohyb trhaný: každá změna překreslí celých 800×480 px v PSRAM |
+| Výkon, režim **DIRECT** | **29 FPS, 57 % CPU**, plynulé, bez artefaktů. Strop 30 FPS dává `LV_DEF_REFR_PERIOD` = 33 ms. → **použít DIRECT** |
+| Paměť (testovací obrazovka) | interní RAM volná ~286 kB (největší blok 241 kB), PSRAM volná 6,85 MB; 2 framebuffery = 1,5 MB v PSRAM |
+| Velikost firmwaru | 715 kB (testovací sketch bez webu) |
+| `lv_demo_widgets` | v Arduinu nejde: složka `demos/` leží mimo `src/` knihovny a nepřekládá se. Test proto běžel na vlastní testovací obrazovce. |
+| Chyba v adaptéru Waveshare | velikost bufferu `width × height × sizeof(lv_color_t)`: `lv_color_t` má v LVGL 9 **3 B**, správně je 2 B (RGB565) |
+| LVGL 9.6 – změny API | `lv_obj_add_flag` / `lv_obj_remove_flag` / `lv_obj_has_flag` jsou **deprecated** (varování v logu), používat settery a gettery `lv_obj_set_<flag>()` / `lv_obj_is_<flag>()`. Veřejné hlavičky se přesunuly do `include/lvgl/`, `#include <lvgl.h>` funguje dál. `LV_COLOR_DEPTH` v `lv_conf.h` už není, formát nastavuje `lv_display_set_color_format()`. |
+
+Testovací sketch (adaptér Waveshare s režimem DIRECT, vlastní testovací obrazovka, `lv_conf.h`,
+`sketch.yaml`) zůstal mimo repozitář v pracovní složce session. Na desce teď běží on.
+
+**Pro Arduino IDE** (bez profilu) je nutné opravit globální instalaci:
+
+1. jako správce spustit `chkdsk C: /f` (vyžaduje restart),
+2. smazat `%LOCALAPPDATA%\Arduino15\packages\esp32\tools\esp-x32\2601`,
+3. v Boards Manageru přeinstalovat *esp32 by Espressif* 3.3.12.
+
+Bez toho nejspíš padá i `DevOpsDashboard\build.cmd`, protože profil nepoužívá a překládá globální
+instalací (neověřeno).
+
 ### Fáze 1 – kostra sketche a port LVGL
 
 1. Vytvořit `DevOpsDashboard43\`: `.ino`, `LvPort`, `lv_conf.h`, `esp_panel_board_supported_conf.h`,
-   `sketch.yaml`, `build.cmd` (výchozí port COM9), `partitions.csv`, `.gitignore`, `LICENSE.txt`.
+   `sketch.yaml`, `build.cmd` (výchozí port COM9, `--profile default`), `partitions.csv`, `.gitignore`,
+   `LICENSE.txt`.
 2. `LvPort`: vlastní kód (MIT), vzor je adaptér Waveshare.
    - LVGL task na jádře 1 s rekurzivním mutexem, tick přes `esp_timer`
    - 2 framebuffery v PSRAM, bounce buffer 10 řádků, přepnutí bufferu ve VSYNC
-   - začít režimem **FULL** (ověřený Waveshare); potom zkusit **DIRECT**, kde LVGL 9 překresluje jen
-     změněné oblasti a synchronizuje je mezi buffery. Ponechat rychlejší, změřit monitorem výkonu.
+   - režim **DIRECT** (ověřeno ve fázi 0) se správnou velikostí bufferu (2 B na pixel)
    - dotyk GT911 jako `LV_INDEV_TYPE_POINTER`
    - `LvPort_Lock()`, `LvPort_Unlock()`, `LvPort_SetBacklight(bool)`, heartbeat
+   - volitelně vyzkoušet `LV_USE_OS LV_OS_FREERTOS` + `LV_DRAW_SW_DRAW_UNIT_CNT 2` (kreslení na obou jádrech)
 3. Testovací obrazovka: text a tlačítko, ověřit dotyk.
 
 **Commit:** `Phase 43.1: LVGL 9 port for Waveshare ESP32-S3-Touch-LCD-4.3`
@@ -235,12 +263,13 @@ tohoto plánu a [stavu a dalších kroků](DevOpsDashboard-dalsi-kroky.md).
 
 | Riziko | Dopad | Opatření |
 | --- | --- | --- |
-| LVGL 9.6.0 není ověřené Waveshare | nepřeloží se / chyby | Fáze 0 to odhalí; záloha 9.5.0 |
-| `esp-lib-utils` 0.3.0 nainstalovaná jako závislost | nepřeloží se | připnout 0.2.x v `sketch.yaml` |
-| `lv_conf.h` a konfiguraci desky knihovny nevidí | nepřeloží se / špatná deska | ověřit ve fázi 0, předat přes `--build-property` |
+| LVGL 9.6.0 není ověřené Waveshare | nepřeloží se / chyby | **vyřešeno** ve fázi 0: funguje |
+| `esp-lib-utils` 0.3.0 nainstalovaná jako závislost | nepřeloží se | připnout 0.2.3 v `sketch.yaml` |
+| `lv_conf.h` a konfiguraci desky knihovny nevidí | nepřeloží se / špatná deska | **vyřešeno** ve fázi 0: stačí složka sketche |
+| Poškozený globální toolchain 3.3.12 | build mimo profil padá | překládat jen přes profil; globální instalaci opravit (fáze 0) |
 | Zrušení obrazu při zápisu do flash / Wi-Fi zátěži | krátké bliknutí | bounce buffer, restart ve VSYNC, méně zápisů NVS |
 | Interní RAM (LVGL + Wi-Fi + bounce buffery) | pády, selhání HTTP | paměť LVGL a framebuffery v PSRAM, hlídat `/api/status` |
-| Režim FULL překresluje celou obrazovku | vyšší zátěž CPU | změřit, případně režim DIRECT |
+| Režim FULL překresluje celou obrazovku | 9 FPS, 97 % CPU | **vyřešeno** režimem DIRECT: 29 FPS, 57 % CPU |
 | GPIO0 sdílený s displejem (G3) | rušení obrazu | tlačítko BOOT číst jen před inicializací displeje |
 | EXIO5 na CH422G (USB / CAN) | odpojí nativní USB | nevadí: logy jdou přes CH343 (COM9); ESP32_Display_Panel nastavuje EXIO sama |
 
