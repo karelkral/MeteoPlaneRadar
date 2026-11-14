@@ -5,6 +5,7 @@
 > [doporučení: LVGL v Arduinu](DevOpsDashboard-doporuceni-LVGL.md),
 > [podpora dalších desek](DevOpsDashboard-dalsi-desky.md),
 > [výukový průvodce REST API](DevOpsDashboard-REST-API.md),
+> [plán napojení REST API](DevOpsDashboard43-REST-API-plan.md),
 > [README firmwaru 2.1](../DevOpsDashboard/README.md).
 >
 > Stav: **fáze 0 hotová** (ověření hardwaru a knihoven, [výsledky](#výsledky-fáze-0-14-11-2026)),
@@ -252,6 +253,55 @@ instalací (neověřeno).
 
 **Commit:** `Phase 43.5: watchdogs, OTA handling and tests`
 
+#### Výsledky fáze 5 (14. 11. 2026)
+
+**5.1 Hlídání displeje – hotovo** (commit `Phase 43.5.1`)
+
+- `loop()` restartuje desku přes `LvPort_Restart()`, když LVGL task 10 s nedokončil průchod
+  nebo panel 3 s nedokončil snímek. Během OTA a 10 s po ní je hlídání pozastavené.
+- `/api/status` hlásí `lvglAgeMs` (běžně do 30 ms) a `frames` (přibývá ~39 za sekundu).
+- Ověřeno testovací variantou `DOD43_WD_TEST=1`: drží zámek LVGL, restart přišel po 10,0 s.
+  V běžném provozu žádný falešný restart.
+- Opravena chyba nalezená testem: stáří heartbeatu se počítalo bez znaménka a po startu
+  přeteklo na 4294967295 ms, což vedlo k falešnému restartu. Nově `LvPort_BeatAgeMs()`.
+- **Neověřeno:** větev „panel stopped scanning“. Zastavení RGB periferie se nepodařilo
+  vyvolat uměle.
+
+**5.2 OTA – částečně, otevřený problém** (commit `Phase 43.5.2`)
+
+- Funguje: zpráva „Updating firmware...“ svítí 1,5 s, pak zhasne podsvícení, po zápisu se
+  1,5 s ukáže „Done, restarting...“. Restart jde přes `LvPort_Restart()`, `/api/status` hlásí
+  `app` (`app0`/`app1`).
+- Podsvícení během zápisu **musí** zhasnout. Zkoušel jsem ho nechat zapnuté a obraz během
+  zápisu do flash poskakoval všemi směry, blikal a třásl se.
+- Přidáno `WiFi.setSleep(false)`. Bez něj selhaly 2 ze 4 OTA, s ním prošlo 14 z 15 OTA
+  spuštěných krátce po restartu.
+- Do logu přidán průběh: každých 128 kB, nejpomalejší `Update.write()` (~110 ms, mazání sektoru)
+  a místo přerušení.
+
+> **K ŘEŠENÍ – OTA se občas přeruší („Empty reply from server“ / „Connection was reset“).**
+>
+> | Pozorování | Hodnota |
+> | --- | --- |
+> | Příznak | upload se uprostřed zastaví, po 5 s bez dat ho `WebServer` ukončí (`HTTP_MAX_POST_WAIT`), deska zůstane na staré verzi a dál běží |
+> | Log | `OTA: aborted after 415 kB, 24358 ms (no data for 5 s or client gone)` |
+> | Kdy | **po nečinnosti**: první OTA po ~90 s klidu selhala, série OTA hned po restartu prochází (8/8) |
+> | Bez `setSleep(false)` | 2 ze 4 selhaly (po 0,7 / 1,2 MB) |
+> | Propustnost | kolísá 30–100 kB/s; `Update.write()` max. 110 ms, deska příjem nebrzdí |
+> | Totéž | „Empty reply“ hlásil i DevOpsDashboard (core 3.3.10). MeteoPlaneRadar (core **3.0.7**) podle autora funguje, kód OTA má stejný. |
+>
+> Co zkusit dál:
+> 1. Stejné měření (90 s klidu, pak OTA) s core 3.0.7, tedy oddělit vliv ESP-IDF 5.5 / lwIP od našeho kódu.
+> 2. Za běhu ověřit, že `setSleep(false)` platí i po automatickém znovupřipojení (`esp_wifi_get_ps`).
+> 3. Vyloučit RGB panel: během uploadu zastavit snímání (`esp_lcd_rgb_panel` – stop/restart), nebo
+>    test na buildu bez displeje.
+> 4. Přerušení po 5 s bez dat nastavit delší (`HTTP_MAX_POST_WAIT` v build flags), ať je vidět,
+>    jestli se přenos sám rozběhne.
+> 5. Z prohlížeče (`/update`) zkusit totéž – posílá jinak než `curl -F`.
+>
+> Do vyřešení: když OTA selže, zopakovat ji; deska zůstane funkční na staré verzi. Případně nahrát
+> přes USB (`build.cmd COM9`).
+
 ### Fáze 6 – dokumentace
 
 `DevOpsDashboard43\README.md` (build, první start, web, otestováno), `CHANGELOG.md`, aktualizace
@@ -275,8 +325,8 @@ tohoto plánu a [stavu a dalších kroků](DevOpsDashboard-dalsi-kroky.md).
 
 ## 7. Mimo rozsah
 
-- REST API: navazující krok podle [doporučení, kap. 4](DevOpsDashboard-doporuceni-LVGL.md#4-architektura-síť-ve-vlastním-tasku-ui-jen-pod-zámkem)
-  (fetch task, `ApiSnapshot` pod mutexem). `DashData.h` je na to připravené.
+- REST API: navazující krok, plán v [DevOpsDashboard43-REST-API-plan.md](DevOpsDashboard43-REST-API-plan.md)
+  (fáze 43.7–43.11: profily prostředí, API klíč, fetch task, ruční obnovení).
 - Další desky (7", 5", kulaté 2.1 / 2.8C). ESP32_Display_Panel je podporuje, takže je lze přidat později.
 
 ## 8. Zdroje

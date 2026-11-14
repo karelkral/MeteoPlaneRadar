@@ -64,6 +64,10 @@ static bool tryConnectSlot(int slot, uint32_t timeoutMs, bool show) {
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  // No modem sleep: with it the radio dozes between beacons and a firmware
+  // upload stalls half way ("Empty reply from server" in 2 of 4 tries). The
+  // device runs from a power supply, so the extra ~50 mA do not matter.
+  WiFi.setSleep(false);
   WiFi.disconnect(false);
   WiFi.begin(ssid, Settings_WifiPass((uint8_t)slot));
 

@@ -23,6 +23,7 @@
 #include <Update.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
+#include <esp_ota_ops.h>
 #include <time.h>
 
 static WebServer  s_srv(WEB_PORT);
@@ -186,6 +187,9 @@ static void handleStatus() {
   doc["lvglAgeMs"] = LvPort_BeatAgeMs();
   doc["frames"]    = LvPort_FrameCount();
   doc["resetReason"] = resetReason();
+  // Which OTA slot runs - flips between app0 and app1 with every update.
+  const esp_partition_t* run = esp_ota_get_running_partition();
+  doc["app"] = run ? run->label : "?";
 
   if (Clock_TimeValid()) {
     time_t now = time(nullptr);
@@ -297,16 +301,18 @@ static void handleNotFound() {
 
 // --- OTA callbacks ----------------------------------------------------------
 // The RGB panel streams its frame buffer out of PSRAM continuously, and writing
-// flash suspends the cache from under it - the picture tears and jumps. So the
-// message goes up, the backlight goes off for the duration and the browser
-// shows the real progress bar. loop() (this task) holds the LVGL lock for the
-// whole upload, which stops all drawing until otaEnd().
+// flash suspends the cache from under it - the picture jumps and shakes
+// (checked on the board). So the message stays up long enough to read, then
+// the backlight goes off for the duration and the browser shows the real
+// progress bar. loop() (this task) holds the LVGL lock for the whole upload,
+// which stops all drawing until otaEnd().
+#define OTA_MESSAGE_MS 1500
 static bool s_otaLocked = false;
 
 static void otaStart() {
   s_updating = true;
   Ui_ShowMessage("Updating firmware...", "Do not disconnect power");
-  delay(300);                          // let the LVGL task draw the message
+  delay(OTA_MESSAGE_MS);               // the LVGL task draws it meanwhile
   LvPort_Lock();
   s_otaLocked = true;
   Ui_SetBrightness(0);                 // backlight off
@@ -388,6 +394,10 @@ static void handleUpdatePage() {
 // Called repeatedly by WebServer as the body arrives. The whole transfer runs
 // inside one handleClient(), so nothing else can be drawing meanwhile - but the
 // watchdog still has to be fed by hand.
+static uint32_t s_updStartMs;
+static uint32_t s_updMaxWriteMs;
+static uint32_t s_updNextLog;
+
 static void handleUpdateUpload() {
   HTTPUpload& up = s_srv.upload();
 
@@ -398,6 +408,9 @@ static void handleUpdateUpload() {
       if (!updateAuthed()) { s_updErr = "auth"; return; }
       Serial.printf("OTA: %s\n", up.filename.c_str());
       otaStart();
+      s_updStartMs = millis();
+      s_updMaxWriteMs = 0;
+      s_updNextLog = 128 * 1024;
       // The browser does not announce the image size up front, so let Update
       // take the whole free OTA slot.
       if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
@@ -406,16 +419,26 @@ static void handleUpdateUpload() {
       }
       break;
 
-    case UPLOAD_FILE_WRITE:
+    case UPLOAD_FILE_WRITE: {
       if (s_updErr.length()) return;              // already failed, drain the body
+      const uint32_t t0 = millis();
       if (Update.write(up.buf, up.currentSize) != up.currentSize) {
         s_updErr = Update.errorString();
         Update.abort();
         otaEnd(false);
         return;
       }
+      const uint32_t dt = millis() - t0;
+      if (dt > s_updMaxWriteMs) s_updMaxWriteMs = dt;
+      if (up.totalSize >= s_updNextLog) {
+        s_updNextLog += 128 * 1024;
+        Serial.printf("OTA: %u kB in %lu ms (slowest write %lu ms)\n",
+                      (unsigned)(up.totalSize / 1024), (unsigned long)(millis() - s_updStartMs),
+                      (unsigned long)s_updMaxWriteMs);
+      }
       Watchdog_Feed();
       break;
+    }
 
     case UPLOAD_FILE_END:
       if (s_updErr.length()) return;
@@ -431,6 +454,8 @@ static void handleUpdateUpload() {
 
     case UPLOAD_FILE_ABORTED:
       if (s_updErr == "auth") return;             // never started, keep the 401
+      Serial.printf("OTA: aborted after %u kB, %lu ms (no data for 5 s or client gone)\n",
+                    (unsigned)(up.totalSize / 1024), (unsigned long)(millis() - s_updStartMs));
       if (Update.isRunning()) Update.abort();
       if (s_updating) otaEnd(false);              // only if the screen was taken over
       s_updErr = "aborted";
@@ -444,7 +469,7 @@ static void handleUpdateDone() {
   s_srv.sendHeader("Connection", "close");
   if (s_updOk) {
     s_srv.send(200, "text/plain", "OK");
-    delay(400);
+    delay(OTA_MESSAGE_MS);             // "Done, restarting..." stays readable
     LvPort_Restart();
   }
   s_srv.send(500, "text/plain", s_updErr.length() ? s_updErr : String("update failed"));
