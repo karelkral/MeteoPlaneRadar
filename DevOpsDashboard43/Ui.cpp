@@ -7,6 +7,7 @@
 #include "Theme.h"
 #include "LocalTime.h"
 #include "DashData.h"
+#include "DevOpsApi.h"
 #include "ScreenDashboard.h"
 #include "ScreenClock.h"
 #include "src/fonts/Fonts.h"
@@ -15,6 +16,9 @@
 
 #define DIM_MIN_PCT 10
 #define QR_SIZE     300
+#define TITLE_MAX_W 380             // the title never reaches the page dots
+#define REFRESH_W   56              // touch target of the refresh icon
+#define SPIN_MS     1000
 
 static const char* const TITLES[UI_SCREEN_COUNT] = { "DevOps dashboard", "Clock" };
 
@@ -22,6 +26,10 @@ static lv_obj_t*    s_tv;
 static lv_obj_t*    s_title;
 static lv_obj_t*    s_dot[UI_SCREEN_COUNT];
 static lv_obj_t*    s_time;
+static lv_obj_t*    s_refresh;                 // touch target of the icon
+static lv_obj_t*    s_refreshIcon;
+static char         s_profile[API_PROFILE_NAME_MAX + 1] = "";
+static bool         s_spinning = false;
 static lv_obj_t*    s_dim;
 static lv_obj_t*    s_overlay;                 // full-screen panel for the two below
 static lv_obj_t*    s_portal;
@@ -37,14 +45,75 @@ static long         s_shownMin = -2;
 static int8_t       s_backlight = -1;          // -1 = not set yet
 static std::atomic<int> s_screenChanged{-1};   // written by the LVGL task
 
-// Title, dots and the bar clock for the active screen. The clock screen shows
-// the time itself, so the bar leaves it out there.
+// Title (with the name of the active API profile on the dashboard), the dots
+// and the refresh icon for the screen on show.
+static void updateTitle() {
+  char t[64];
+  if (s_screen == UI_SCREEN_DASHBOARD && s_profile[0])
+    snprintf(t, sizeof(t), "%s \xC2\xB7 %s", TITLES[s_screen], s_profile);
+  else
+    snprintf(t, sizeof(t), "%s", TITLES[s_screen]);
+  if (strcmp(lv_label_get_text(s_title), t) != 0) lv_label_set_text(s_title, t);
+}
+
+static void spinExec(void* obj, int32_t v) {
+  lv_obj_set_style_transform_rotation((lv_obj_t*)obj, v, 0);   // 0.1 degree units
+}
+
+static void setSpinning(bool on) {
+  if (on == s_spinning) return;
+  s_spinning = on;
+  if (on) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, s_refreshIcon);
+    lv_anim_set_exec_cb(&a, spinExec);
+    lv_anim_set_values(&a, 0, 3600);
+    lv_anim_set_duration(&a, SPIN_MS);
+    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_start(&a);
+  } else {
+    lv_anim_delete(s_refreshIcon, spinExec);
+    lv_obj_set_style_transform_rotation(s_refreshIcon, 0, 0);
+  }
+  lv_obj_set_style_text_color(s_refreshIcon, on ? COL_ACCENT : COL_DIM, 0);
+}
+
+// The icon only makes sense on the dashboard, and only with a profile to fetch.
+static void updateRefresh(const ApiSnapshot& a) {
+  const bool usable = a.state != API_OFF && a.state != API_NO_KEY;
+  lv_obj_set_hidden(s_refresh, !(usable && s_screen == UI_SCREEN_DASHBOARD));
+  setSpinning(a.busy && usable);
+}
+
+static void onRefreshClicked(lv_event_t*) {
+  DevOpsApi_RefreshNow();                      // thread-safe, ignored while busy
+}
+
+// Every 500 ms: new API data, the age of the old ones, the profile name.
+static void apiTimer(lv_timer_t*) {
+  static uint32_t lastRev = UINT32_MAX;
+  static uint32_t lastSec = UINT32_MAX;
+  const ApiSnapshot a = DevOpsApi_Get();
+  const uint32_t sec = millis() / 1000UL;
+  if (a.revision == lastRev && sec == lastSec) return;
+  lastRev = a.revision;
+  lastSec = sec;
+  if (strcmp(s_profile, a.profile) != 0) {
+    strlcpy(s_profile, a.profile, sizeof(s_profile));
+    updateTitle();
+  }
+  ScreenDashboard_SetData(a);
+  updateRefresh(a);
+}
+
 static void showActive(uint8_t idx) {
   s_screen = idx;
-  lv_label_set_text(s_title, TITLES[idx]);
+  updateTitle();
   for (int i = 0; i < UI_SCREEN_COUNT; i++)
     lv_obj_set_style_bg_color(s_dot[i], i == idx ? COL_TEXT : COL_LINE, 0);
   lv_obj_set_hidden(s_time, idx == UI_SCREEN_CLOCK);
+  updateRefresh(DevOpsApi_Get());
 }
 
 static void onTileChanged(lv_event_t*) {
@@ -83,6 +152,8 @@ static void createBar(lv_obj_t* scr) {
   s_title = lv_label_create(bar);
   lv_obj_set_style_text_font(s_title, &inter_24, 0);
   lv_obj_set_style_text_color(s_title, COL_ACCENT, 0);
+  lv_obj_set_width(s_title, TITLE_MAX_W);
+  lv_label_set_long_mode(s_title, LV_LABEL_LONG_MODE_DOTS);
   lv_obj_align(s_title, LV_ALIGN_LEFT_MID, 20, 0);
 
   for (int i = 0; i < UI_SCREEN_COUNT; i++) {
@@ -97,6 +168,23 @@ static void createBar(lv_obj_t* scr) {
   lv_obj_set_style_text_font(s_time, &inter_24, 0);
   lv_obj_set_style_text_color(s_time, COL_TEXT, 0);
   lv_obj_align(s_time, LV_ALIGN_RIGHT_MID, -20, 0);
+
+  // Manual refresh: the icon left of the clock, in a wider touch target.
+  s_refresh = plainObj(bar);
+  lv_obj_set_size(s_refresh, REFRESH_W, UI_BAR_H);
+  lv_obj_align(s_refresh, LV_ALIGN_RIGHT_MID, -(20 + 70 + 4), 0);
+  lv_obj_set_clickable(s_refresh, true);
+  lv_obj_add_event_cb(s_refresh, onRefreshClicked, LV_EVENT_CLICKED, nullptr);
+  s_refreshIcon = lv_label_create(s_refresh);
+  lv_obj_set_style_text_font(s_refreshIcon, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_color(s_refreshIcon, COL_DIM, 0);
+  lv_label_set_text(s_refreshIcon, LV_SYMBOL_REFRESH);
+  lv_obj_center(s_refreshIcon);
+  lv_obj_update_layout(s_refreshIcon);
+  lv_obj_set_style_transform_pivot_x(s_refreshIcon, lv_obj_get_width(s_refreshIcon) / 2, 0);
+  lv_obj_set_style_transform_pivot_y(s_refreshIcon, lv_obj_get_height(s_refreshIcon) / 2, 0);
+  lv_obj_set_clickable(s_refreshIcon, false);
+  lv_obj_set_hidden(s_refresh, true);
 }
 
 static lv_obj_t* addTile(uint8_t idx, lv_dir_t dir) {
@@ -147,7 +235,7 @@ static void createPortal() {
   lv_label_set_long_mode(step3, LV_LABEL_LONG_MODE_WRAP);
   gap = plainObj(col);
   lv_obj_set_size(gap, 1, 10);
-  label(col, &inter_20, COL_RUN, "Waiting for your network...");
+  label(col, &inter_20, COL_WARNING, "Waiting for your network...");
 }
 
 static void createMessage() {
@@ -192,7 +280,7 @@ void Ui_Begin(uint8_t screen, uint8_t brightnessPct) {
     lv_obj_t* dash = addTile(UI_SCREEN_DASHBOARD, LV_DIR_RIGHT);
     lv_obj_t* clock = addTile(UI_SCREEN_CLOCK, LV_DIR_LEFT);
     ScreenDashboard_Create(dash);
-    ScreenDashboard_SetData(DashData_Test());
+    ScreenDashboard_SetData(DevOpsApi_Get());
     ScreenClock_Create(clock);
 
     showActive(screen);
@@ -201,6 +289,7 @@ void Ui_Begin(uint8_t screen, uint8_t brightnessPct) {
 
     barClock(nullptr);
     lv_timer_create(barClock, 1000, nullptr);
+    lv_timer_create(apiTimer, 500, nullptr);
 
     createOverlay();
 

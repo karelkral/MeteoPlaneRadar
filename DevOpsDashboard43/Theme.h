@@ -17,7 +17,8 @@
 #define COL_DIM       lv_color_hex(0x9E9E9E)   // secondary text
 #define COL_LINE      lv_color_hex(0x303030)   // separators, empty ring
 #define COL_ACCENT    lv_color_hex(0x26C6DA)   // titles
-#define COL_OK        lv_color_hex(0x4CAF50)   // succeeded
-#define COL_FAIL      lv_color_hex(0xF44336)   // failed
-#define COL_RUN       lv_color_hex(0xFFC107)   // running
-#define COL_CANCEL    lv_color_hex(0x9E9E9E)   // canceled
+#define COL_RUNNING   lv_color_hex(0x4CAF50)   // green
+#define COL_WAITING   lv_color_hex(0x42A5F5)   // blue
+#define COL_WARNING   lv_color_hex(0xFFC107)   // yellow
+#define COL_ERROR     lv_color_hex(0xF44336)   // red
+#define COL_STALE     lv_color_hex(0x757575)   // old or missing data

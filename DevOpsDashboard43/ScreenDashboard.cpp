@@ -12,6 +12,7 @@
 #include "src/fonts/Fonts.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 // --- Geometry (tile = 800 x 432, below the status bar) -----------------------
 #define RING_CX     230
@@ -24,22 +25,29 @@
 #define LEGEND_R    30             // counts right-aligned this far from the edge
 #define LEGEND_DY   64             // row pitch
 
-static const lv_color_t* sliceColors() {
-  static lv_color_t c[DASH_STATUS_COUNT];
-  c[DASH_SUCCEEDED] = COL_OK;
-  c[DASH_FAILED]    = COL_FAIL;
-  c[DASH_RUNNING]   = COL_RUN;
-  c[DASH_CANCELED]  = COL_CANCEL;
-  return c;
+static lv_color_t sliceColor(int i) {
+  switch (i) {
+    case DASH_RUNNING: return COL_RUNNING;
+    case DASH_WAITING: return COL_WAITING;
+    case DASH_WARNING: return COL_WARNING;
+    default:           return COL_ERROR;
+  }
+}
+
+// Old data keeps a faint hint of its colour, so the slices stay tellable apart.
+static lv_color_t shownColor(int i, bool stale) {
+  return stale ? lv_color_mix(sliceColor(i), COL_STALE, 40) : sliceColor(i);
 }
 
 static lv_obj_t* s_ring;                        // square container of the arcs
 static lv_obj_t* s_empty;                       // grey ring while there is no data
 static lv_obj_t* s_arc[DASH_STATUS_COUNT];
 static lv_obj_t* s_pct[DASH_STATUS_COUNT];
+static lv_obj_t* s_dot[DASH_STATUS_COUNT];
 static lv_obj_t* s_total;
 static lv_obj_t* s_caption;
 static lv_obj_t* s_count[DASH_STATUS_COUNT];
+static lv_obj_t* s_status;                      // one line under the legend
 
 static lv_obj_t* makeArc(lv_obj_t* parent, lv_color_t color) {
   lv_obj_t* a = lv_arc_create(parent);
@@ -67,8 +75,6 @@ static lv_obj_t* makeLabel(lv_obj_t* parent, const lv_font_t* font, lv_color_t c
 }
 
 void ScreenDashboard_Create(lv_obj_t* tile) {
-  const lv_color_t* colors = sliceColors();
-
   s_ring = lv_obj_create(tile);
   lv_obj_remove_style_all(s_ring);
   lv_obj_set_size(s_ring, 2 * RING_OUT, 2 * RING_OUT);
@@ -78,26 +84,26 @@ void ScreenDashboard_Create(lv_obj_t* tile) {
 
   s_empty = makeArc(s_ring, COL_LINE);
   lv_arc_set_angles(s_empty, 0, 360);
-  for (int i = 0; i < DASH_STATUS_COUNT; i++) s_arc[i] = makeArc(s_ring, colors[i]);
+  for (int i = 0; i < DASH_STATUS_COUNT; i++) s_arc[i] = makeArc(s_ring, sliceColor(i));
   for (int i = 0; i < DASH_STATUS_COUNT; i++) s_pct[i] = makeLabel(s_ring, &inter_sb_24, COL_BG);
 
   s_total = makeLabel(s_ring, &inter_sb_72, COL_TEXT);
   lv_obj_align(s_total, LV_ALIGN_CENTER, 0, -14);
   s_caption = makeLabel(s_ring, &inter_20, COL_DIM);
-  lv_label_set_text(s_caption, "pipelines / 24h");
+  lv_label_set_text(s_caption, "Poirot computers");
   lv_obj_align(s_caption, LV_ALIGN_CENTER, 0, 38);
 
   const int y0 = RING_CY - (DASH_STATUS_COUNT - 1) * LEGEND_DY / 2;
   for (int i = 0; i < DASH_STATUS_COUNT; i++) {
     const int y = y0 + i * LEGEND_DY;
 
-    lv_obj_t* dot = lv_obj_create(tile);
-    lv_obj_remove_style_all(dot);
-    lv_obj_set_size(dot, 18, 18);
-    lv_obj_set_pos(dot, LEGEND_DOT - 9, y - 9);
-    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(dot, colors[i], 0);
-    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    s_dot[i] = lv_obj_create(tile);
+    lv_obj_remove_style_all(s_dot[i]);
+    lv_obj_set_size(s_dot[i], 18, 18);
+    lv_obj_set_pos(s_dot[i], LEGEND_DOT - 9, y - 9);
+    lv_obj_set_style_radius(s_dot[i], LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(s_dot[i], sliceColor(i), 0);
+    lv_obj_set_style_bg_opa(s_dot[i], LV_OPA_COVER, 0);
 
     lv_obj_t* name = makeLabel(tile, &inter_32, COL_TEXT);
     lv_label_set_text(name, DashData_Name(i));
@@ -106,22 +112,72 @@ void ScreenDashboard_Create(lv_obj_t* tile) {
     s_count[i] = makeLabel(tile, &inter_32, COL_TEXT);
     lv_obj_align(s_count[i], LV_ALIGN_RIGHT_MID, -LEGEND_R, y - UI_TILE_H / 2);
   }
+
+  s_status = makeLabel(tile, &inter_20, COL_DIM);
+  lv_obj_set_width(s_status, UI_W - (LEGEND_DOT - 9) - LEGEND_R);
+  lv_label_set_long_mode(s_status, LV_LABEL_LONG_MODE_DOTS);
+  lv_obj_align(s_status, LV_ALIGN_TOP_LEFT, LEGEND_DOT - 9, y0 + DASH_STATUS_COUNT * LEGEND_DY - 20);
 }
 
-void ScreenDashboard_SetData(const DashData& d) {
+// "12 s", "3 min", "2 h"
+static void formatAge(char* out, size_t cap, uint32_t sec) {
+  if (sec < 90)        snprintf(out, cap, "%lu s", (unsigned long)sec);
+  else if (sec < 5400) snprintf(out, cap, "%lu min", (unsigned long)(sec / 60));
+  else                 snprintf(out, cap, "%lu h", (unsigned long)(sec / 3600));
+}
+
+static void statusLine(const ApiSnapshot& s, uint32_t ageS, char* out, size_t cap) {
+  char age[16];
+  formatAge(age, sizeof(age), ageS);
+  switch (s.state) {
+    case API_OFF:     snprintf(out, cap, "API not configured"); break;
+    case API_NO_KEY:  snprintf(out, cap, "API key missing"); break;
+    case API_WAITING: snprintf(out, cap, "%s", s.errorText[0] ? s.errorText : "waiting for data..."); break;
+    case API_OK:      snprintf(out, cap, "updated %s ago", age); break;
+    default:
+      if (s.valid) snprintf(out, cap, "%s \xC2\xB7 data %s old", s.errorText, age);
+      else         snprintf(out, cap, "%s", s.errorText);
+      break;
+  }
+}
+
+void ScreenDashboard_SetData(const ApiSnapshot& s) {
+  const uint32_t ageS = s.valid ? (millis() - s.lastOkMs) / 1000UL : 0;
+  const bool stale = s.valid &&
+      (s.state == API_ERROR || ageS > (uint32_t)API_STALE_FACTOR * s.intervalSec);
+
+  // The status line changes every second, the ring only with the data.
+  char line[64];
+  statusLine(s, ageS, line, sizeof(line));
+  if (strcmp(lv_label_get_text(s_status), line) != 0) lv_label_set_text(s_status, line);
+
+  const uint16_t cnt[DASH_STATUS_COUNT] = { s.running, s.waiting, s.warning, s.error };
+  uint32_t key = (s.valid ? 1u : 0u) | (stale ? 2u : 0u) | ((uint32_t)s.total << 8);
+  for (int i = 0; i < DASH_STATUS_COUNT; i++) key = key * 31u + cnt[i];
+  static uint32_t lastKey = 0;
+  static bool     haveKey = false;
+  if (haveKey && key == lastKey) return;
+  haveKey = true;
+  lastKey = key;
+
   uint32_t sum = 0;
-  if (d.valid) for (int i = 0; i < DASH_STATUS_COUNT; i++) sum += d.count[i];
+  if (s.valid) for (int i = 0; i < DASH_STATUS_COUNT; i++) sum += cnt[i];
 
   lv_obj_set_hidden(s_empty, sum != 0);
-  lv_label_set_text(s_total, sum ? "" : "-");
-  if (sum) lv_label_set_text_fmt(s_total, "%lu", (unsigned long)sum);
+  if (s.valid) lv_label_set_text_fmt(s_total, "%u", (unsigned)s.total);
+  else         lv_label_set_text(s_total, "-");
+  lv_obj_set_style_text_color(s_total, s.valid && !stale ? COL_TEXT : COL_DIM, 0);
 
   // Slices: whole degrees (LV_USE_FLOAT is off). The running angle is rounded,
   // not each sweep, so the slices always add up to the full circle.
   const int rMid = (RING_IN + RING_OUT) / 2;
   uint32_t acc = 0;
   for (int i = 0; i < DASH_STATUS_COUNT; i++) {
-    const uint16_t v = d.valid ? d.count[i] : 0;
+    const lv_color_t col = shownColor(i, stale);
+    lv_obj_set_style_arc_color(s_arc[i], col, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(s_dot[i], col, 0);
+
+    const uint16_t v = s.valid ? cnt[i] : 0;
     const int a0 = sum ? (int)lroundf(360.0f * acc / sum) : 0;
     acc += v;
     const int a1 = sum ? (int)lroundf(360.0f * acc / sum) : 0;
@@ -148,7 +204,8 @@ void ScreenDashboard_SetData(const DashData& d) {
   }
 
   for (int i = 0; i < DASH_STATUS_COUNT; i++) {
-    if (d.valid) lv_label_set_text_fmt(s_count[i], "%u", (unsigned)d.count[i]);
+    if (s.valid) lv_label_set_text_fmt(s_count[i], "%u", (unsigned)cnt[i]);
     else         lv_label_set_text(s_count[i], "-");
+    lv_obj_set_style_text_color(s_count[i], stale || !s.valid ? COL_DIM : COL_TEXT, 0);
   }
 }
