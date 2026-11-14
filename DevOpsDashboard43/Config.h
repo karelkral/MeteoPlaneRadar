@@ -58,6 +58,7 @@
 #define API_KEY_HEADER         "X-Api-Key"  // ApiHeaderNames.ApiKey on the server
 #define API_STALE_FACTOR       3            // data older than 3 intervals = stale
 #define API_TASK_STACK         8192
+#define API_RETRY_MS           5000UL       // retry after a transport error / 5xx
 #define API_INTERVAL_S_DEFAULT 30
 #define API_INTERVAL_S_MIN     5
 #define API_INTERVAL_S_MAX     3600

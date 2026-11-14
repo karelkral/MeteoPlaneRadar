@@ -97,6 +97,11 @@ bool Net_GetString(const char* url, String& out, const char* tag,
   if (httpCode) *httpCode = code;
   if (code != HTTP_CODE_OK) {
     Serial.printf("%s: HTTP %d\n", tag, code);
+    if (code < 0 && tls) {
+      char le[100] = "";
+      int lc = secure.lastError(le, sizeof(le));
+      Serial.printf("%s: TLS last error %d: %s\n", tag, lc, le);
+    }
     // Say what was asked and what the server said about it. A bare "HTTP 404"
     // cannot tell a wrong parameter from a source that simply has no data yet.
     if (code > 0) {

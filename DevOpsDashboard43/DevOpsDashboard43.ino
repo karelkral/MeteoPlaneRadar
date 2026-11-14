@@ -40,6 +40,7 @@
 #include "WiFiPortal.h"
 #include "WebConfig.h"
 #include "Clock.h"
+#include "DevOpsApi.h"
 #include "Watchdog.h"
 
 #define HEAP_LOG_PERIOD_MS 600000UL
@@ -181,6 +182,10 @@ void setup() {
 
   // After WiFi_Begin(): the SNTP client needs the network stack to exist.
   Clock_Begin();
+
+  // Last: the fetch task needs the network stack, and it starts with the stored profile.
+  DevOpsApi_Begin();
+  DevOpsApi_ApplySettings();
 
   Watchdog_Begin();
   Serial.println("Setup done");

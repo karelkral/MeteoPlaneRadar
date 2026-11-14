@@ -11,6 +11,7 @@
 #include "Version.h"
 #include "Config.h"
 #include "Clock.h"
+#include "DevOpsApi.h"
 #include "Ui.h"
 #include "LvPort.h"
 #include "Watchdog.h"
@@ -127,6 +128,7 @@ static void handlePostConfig() {
   }
 
   Settings_FromJson(doc.as<JsonObjectConst>());
+  DevOpsApi_ApplySettings();               // new profile / key / interval take effect now
   Ui_SetBrightness(Settings_Backlight());  // see the change while on the slider
 
   JsonDocument res;
@@ -205,6 +207,18 @@ static void handleStatus() {
 
   char b[64];
   Status_Text(ST_API, b, sizeof(b)); doc["api"] = b;
+  // Machine-readable details of the same source. Never contains the key.
+  {
+    static const char* const STATE[] = { "off", "no_key", "waiting", "ok", "error" };
+    const ApiSnapshot a = DevOpsApi_Get();
+    JsonObject d = doc["apiDetail"].to<JsonObject>();
+    d["state"]    = STATE[a.state];
+    d["profile"]  = a.profile;
+    d["httpCode"] = a.httpCode;
+    d["error"]    = a.errorText;
+    d["busy"]     = a.busy;
+    if (a.valid) d["ageS"] = (millis() - a.lastOkMs) / 1000UL;
+  }
   Status_Text(ST_NTP, b, sizeof(b)); doc["ntp"] = b;
   sendJson(200, doc);
 }
