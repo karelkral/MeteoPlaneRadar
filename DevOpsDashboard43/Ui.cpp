@@ -28,6 +28,7 @@ static lv_obj_t*    s_dot[UI_SCREEN_COUNT];
 static lv_obj_t*    s_time;
 static lv_obj_t*    s_refresh;                 // touch target of the icon
 static lv_obj_t*    s_refreshIcon;
+static lv_obj_t*    s_spinner;                 // replaces the icon while downloading
 static char         s_profile[API_PROFILE_NAME_MAX + 1] = "";
 static bool         s_spinning = false;
 static lv_obj_t*    s_dim;
@@ -56,27 +57,13 @@ static void updateTitle() {
   if (strcmp(lv_label_get_text(s_title), t) != 0) lv_label_set_text(s_title, t);
 }
 
-static void spinExec(void* obj, int32_t v) {
-  lv_obj_set_style_transform_rotation((lv_obj_t*)obj, v, 0);   // 0.1 degree units
-}
-
+// A spinner (an arc) instead of a rotated symbol: rotating the label goes through
+// an LVGL layer, which made the whole picture flicker in DIRECT render mode.
 static void setSpinning(bool on) {
   if (on == s_spinning) return;
   s_spinning = on;
-  if (on) {
-    lv_anim_t a;
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, s_refreshIcon);
-    lv_anim_set_exec_cb(&a, spinExec);
-    lv_anim_set_values(&a, 0, 3600);
-    lv_anim_set_duration(&a, SPIN_MS);
-    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-    lv_anim_start(&a);
-  } else {
-    lv_anim_delete(s_refreshIcon, spinExec);
-    lv_obj_set_style_transform_rotation(s_refreshIcon, 0, 0);
-  }
-  lv_obj_set_style_text_color(s_refreshIcon, on ? COL_ACCENT : COL_DIM, 0);
+  lv_obj_set_hidden(s_spinner, !on);
+  lv_obj_set_hidden(s_refreshIcon, on);
 }
 
 // The icon only makes sense on the dashboard, and only with a profile to fetch.
@@ -180,10 +167,18 @@ static void createBar(lv_obj_t* scr) {
   lv_obj_set_style_text_color(s_refreshIcon, COL_DIM, 0);
   lv_label_set_text(s_refreshIcon, LV_SYMBOL_REFRESH);
   lv_obj_center(s_refreshIcon);
-  lv_obj_update_layout(s_refreshIcon);
-  lv_obj_set_style_transform_pivot_x(s_refreshIcon, lv_obj_get_width(s_refreshIcon) / 2, 0);
-  lv_obj_set_style_transform_pivot_y(s_refreshIcon, lv_obj_get_height(s_refreshIcon) / 2, 0);
   lv_obj_set_clickable(s_refreshIcon, false);
+
+  s_spinner = lv_spinner_create(s_refresh);
+  lv_spinner_set_anim_params(s_spinner, SPIN_MS, 90);
+  lv_obj_set_size(s_spinner, 26, 26);
+  lv_obj_center(s_spinner);
+  lv_obj_set_style_arc_width(s_spinner, 3, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(s_spinner, 3, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_color(s_spinner, COL_LINE, LV_PART_MAIN);
+  lv_obj_set_style_arc_color(s_spinner, COL_ACCENT, LV_PART_INDICATOR);
+  lv_obj_set_clickable(s_spinner, false);
+  lv_obj_set_hidden(s_spinner, true);
   lv_obj_set_hidden(s_refresh, true);
 }
 

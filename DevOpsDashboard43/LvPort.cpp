@@ -17,7 +17,10 @@ using namespace esp_panel::board;
 #define LVPORT_TASK_CORE     1          // with loop(); WiFi runs on core 0
 #define LVPORT_DELAY_MIN_MS  2
 #define LVPORT_DELAY_MAX_MS  100
-#define LVPORT_BOUNCE_LINES  10         // 800 x 10 px, in internal RAM
+// 20 lines: with 10, the refill ISR sometimes lost the race against LVGL drawing
+// and flash reads on the shared PSRAM/flash bus - the panel then sent the stale
+// bounce buffer again (lines from 20 rows higher: ghost text, streaks). 2 x 32 kB.
+#define LVPORT_BOUNCE_LINES  20         // 800 x 20 px, in internal RAM
 #define LVPORT_FRAME_WAIT_MS 100        // a frame takes ~26 ms at 16 MHz
 
 static Board*                s_board;
