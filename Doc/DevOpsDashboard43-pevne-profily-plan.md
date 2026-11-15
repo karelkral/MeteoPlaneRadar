@@ -1,6 +1,7 @@
 # DevOpsDashboard43 – pevné profily REST API (plán)
 
-Stav: **návrh, neimplementováno.** Inspirace: MeteoPlaneRadar má adresy všech
+Stav: **implementováno** (firmware 0.2.0, kroky 1–6 po jednotlivých commitech); ověření na zařízení
+(krok 7) zbývá. Inspirace: MeteoPlaneRadar má adresy všech
 služeb jako konstanty ve firmwaru (`Config.h`, `ADSB.h`, `CHMU.h`, …); v NVS
 jsou jen uživatelské volby.
 

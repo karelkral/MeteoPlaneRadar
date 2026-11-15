@@ -7,8 +7,10 @@
 > Stav: **hotovo** ve firmwaru 0.2.0, fáze 43.7–43.11 (14.–15. 11. 2026). Výsledky testů jsou
 > v kap. 7. Plán vznikl 14. 11. 2026.
 >
-> Repozitář je veřejný: skutečné adresy serveru a API klíč sem **nepatří**. V textu jsou
-> zástupné hodnoty `<api-host>` a `<Environment>`. Skutečné hodnoty se zadávají jen ve webu zařízení.
+> Repozitář je veřejný: API klíč sem **nepatří**. Od úpravy „pevné profily“ jsou adresy serverů
+> pevně v `API_PROFILE_LIST` v [Config.h](../DevOpsDashboard43/Config.h) (viz
+> [plán pevných profilů](DevOpsDashboard43-pevne-profily-plan.md)); kap. 4.2, 4.4 a 4.7 jsou podle
+> toho upravené. V textu zůstávají zástupné hodnoty `<api-host>` a `<Environment>`.
 
 Dashboard má místo testovacích dat zobrazovat skutečná data z REST API. Musí umět přepínat mezi
 prostředími serveru, autorizovat se API klíčem, obnovovat se každých 30 s a jít obnovit i ručně.
@@ -17,10 +19,10 @@ prostředími serveru, autorizovat se API klíčem, obnovovat se každých 30 s 
 
 | Oblast | Rozhodnutí |
 | --- | --- |
-| Endpoint | `GET {baseUrl}/IotDashboard/PoirotComputers`; cestu doplní firmware, ve webu se zadává jen base URL |
+| Endpoint | `GET {baseUrl}/IotDashboard/PoirotComputers`; cestu doplní firmware, base URL je pevná v profilu |
 | Autorizace | hlavička `X-Api-Key` (na serveru `ApiHeaderNames.ApiKey`) |
-| Prostředí | **3 profily** (název, base URL, API klíč). Aktivní profil se vybírá **jen ve webu**, displej ukazuje jen jeho název v liště. |
-| API klíč | jen pro zápis: web ho nikdy nevrací, ukazuje jen „nastaven / nenastaven“; prázdné pole = ponechat uložený |
+| Prostředí | **3 pevné profily** (název a base URL v `Config.h`, API klíč v NVS). Aktivní profil se vybírá **jen ve webu**, displej ukazuje jen jeho název v liště. |
+| API klíč | jen pro zápis: web ho nikdy nevrací, ukazuje jen „nastaven / nenastaven“; prázdné pole = ponechat uložený, zaškrtávátko „delete key“ = smazat |
 | Dashboard | prstencový graf místo pipelines ukazuje **Poirot počítače**: uprostřed `Error / Total`, nadpis „Poirot computers“ je v liště (viz [plán widgetu](DevOpsDashboard43-widget-plan.md)) |
 | Barvy | Running **zelená**, Waiting **modrá**, Warning **jantarová**, Error **červená** |
 | Obnovení | automaticky podle intervalu (výchozí **30 s**, 5–3600 s); ručně **ikonou ⟳ v liště** |
@@ -132,6 +134,11 @@ task watchdog `loop()` (20 s). Pravidla z [doporučení, kap. 4](DevOpsDashboard
 
 ```cpp
 #define API_PROFILES           3
+#define API_PROFILE_LIST \
+  { "DeveProduction", "https://tfsstage.devops.scia.cz/deveproduction" }, \
+  { "DeveStaging",    "https://tfsstage.devops.scia.cz/devestaging" }, \
+  { "Production",     "https://tfs.devops.scia.cz/Production" }
+#define API_PROFILE_DEFAULT    2            // index v API_PROFILE_LIST: Production
 #define API_PROFILE_NAME_MAX   20
 #define API_URL_MAX            200          // base URL
 #define API_KEY_MAX            128
@@ -157,28 +164,26 @@ task watchdog `loop()` (20 s). Pravidla z [doporučení, kap. 4](DevOpsDashboard
 
 ```cpp
 struct ApiProfile {                       // jen pro čtení zvenku
-  char name[API_PROFILE_NAME_MAX + 1];
-  char baseUrl[API_URL_MAX + 1];
+  const char* name;                       // z API_PROFILE_LIST
+  const char* baseUrl;                    // z API_PROFILE_LIST
   char key[API_KEY_MAX + 1];
 };
 
 const ApiProfile& Settings_ApiProfile(uint8_t slot);
 uint8_t     Settings_ApiActive();                       // 0..API_PROFILES-1
 void        Settings_SetApiActive(uint8_t slot);
-// key == nullptr = ponechat uložený klíč; prázdné baseUrl = slot vymazat (i klíč).
-// false = odmítnuto (URL nezačíná http:// / https://, příliš dlouhé hodnoty).
-bool        Settings_SetApiProfile(uint8_t slot, const char* name, const char* baseUrl, const char* key);
+// Uloží klíč profilu (ořezaný); prázdný / null klíč ho smaže. false = špatný slot nebo klíč delší než API_KEY_MAX.
+bool        Settings_SetApiKey(uint8_t slot, const char* key);
 uint16_t    Settings_ApiIntervalSec();                  // beze změny
 ```
 
-- NVS klíče: `apN0..2` (název), `apU0..2` (base URL), `apK0..2` (klíč), `apAct` (aktivní).
-- Base URL: ořezat mezery a koncová `/`. Když uživatel vloží celou URL končící na
-  `/IotDashboard/PoirotComputers`, tuto cestu odříznout.
-- **Migrace:** když existuje stará `apiUrl` a žádný profil, přesune se do profilu 0 (název „Default“,
-  odříznout známou cestu) a klíč `apiUrl` se smaže.
+- NVS klíče: `akey0..2` (klíč profilu), `apiProf` (aktivní profil, výchozí `API_PROFILE_DEFAULT`).
+- Tabulka se kontroluje při kompilaci (`static_assert`): počet položek, `https://`, bez koncového `/`,
+  délky, `API_PROFILE_DEFAULT`.
+- Při startu se smažou staré klíče (`apN*`, `apU*`, `apK*`, `apAct`, `apiUrl`); klíče se zadají znovu.
 - `Settings_ToJson`: `apiProfiles: [{name, baseUrl, hasKey}]`, `apiActive`, `apiIntervalSec`.
   **Bez klíče.**
-- `Settings_ClearAll()` (tovární reset) maže i profily a klíče.
+- `Settings_ClearAll()` (tovární reset) maže klíče a vrací aktivní profil Production.
 
 ### 4.5 `DevOpsApi.h/.cpp` (nový)
 
@@ -243,13 +248,14 @@ ApiSnapshot DevOpsApi_Get();                       // odkudkoli, vrací kopii
 
 - Sekce **DevOps API**:
   - výběr aktivního profilu (`<select>` s názvy)
-  - 3 řádky profilu: název, base URL (placeholder `https://<api-host>/<Environment>`),
-    klíč (`type=password`, placeholder „(stored)“, když `hasKey`)
+  - 3 řádky profilu: název a base URL jako text, klíč (`type=password`, placeholder „(stored)“,
+    když `hasKey`), zaškrtávátko „delete key“ (jen když je klíč uložen)
   - interval [s]
   - **Save** a u každého profilu **Test**
-  - nápověda: „Base URL of the API, without /IotDashboard/...“
-- `POST /api/config`: `{apiProfiles:[{name, baseUrl, key?}], apiActive, apiIntervalSec}`.
-  Chybějící nebo prázdný `key` = ponechat. Validace jako dnes, chyba `400 {"error":"apiProfile0"}`.
+  - nápověda: profily jsou pevné ve firmwaru, prázdné pole klíč ponechá, „delete key“ ho smaže
+- `POST /api/config`: `{apiProfiles:[{key?, clearKey?}], apiActive, apiIntervalSec}`; `name` a
+  `baseUrl` se ignorují. Neprázdný `key` = uložit, `clearKey:true` = smazat, jinak ponechat.
+  Chyba `400 {"error":"apiProfile0"}` (klíč příliš dlouhý).
   Po uložení `loop()` zavolá `DevOpsApi_Configure(...)` s aktivním profilem.
 - `POST /api/apitest {slot}`: `202`. Fetch task jednorázově zavolá endpoint daného profilu a výsledek
   (HTTP kód, text, data) vrátí `GET /api/apitest` → web se ptá každou sekundu, max. 30 s.

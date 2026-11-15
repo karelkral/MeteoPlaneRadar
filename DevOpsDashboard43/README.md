@@ -24,7 +24,7 @@ fallback for networks that block NTP).
 The status bar of the dashboard shows the name of the active API profile
 (`Poirot computers · Production`). The **⟳ icon** left of the clock refreshes
 the data at once; a small spinner replaces it while a download runs, and it is
-hidden when no profile is set up. The data refresh by themselves every 30 s (configurable). When the
+hidden when the active profile has no API key. The data refresh by themselves every 30 s (configurable). When the
 last download failed, or the data are older than three intervals, the ring turns
 grey and the status line says why (`401 bad API key`, `404 not found`,
 `not JSON (wrong URL?)`, `TLS / network error`, `offline`, ...).
@@ -81,8 +81,8 @@ line of the display, so it can only be read during that first second.
 `http://devopsdashboard43.local/` (or the IP address shown in the serial log):
 
 - **WiFi** – up to three remembered networks.
-- **DevOps API** – three profiles (name, base URL, API key), the active one and
-  the refresh interval; **Test** next to each profile tries the saved profile
+- **DevOps API** – three fixed profiles, the API key of each, the active profile and
+  the refresh interval; **Test** next to each profile tries the saved key
   without changing the dashboard. Details below.
 - **Display** – brightness, previous / next screen. The board can only switch
   the backlight on or off, so brightness is a black layer over the picture;
@@ -93,7 +93,7 @@ line of the display, so it can only be read during that first second.
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
 | `/api/status` | GET | version, board, IP, WiFi, time, heap, PSRAM, running OTA slot (`app`), display health (`lvglAgeMs`, `frames`, `panelResyncs`), API text (`api`) and details (`apiDetail`: state, profile, HTTP code, error, age) and NTP state |
-| `/api/config` | GET / POST | `apiProfiles` (`name`, `baseUrl`, `hasKey` / `key`), `apiActive`, `apiIntervalSec`, `brightness`; `password` + `newPassword`. The API key is write-only: GET returns only `hasKey`, an empty or missing `key` in POST keeps the stored one |
+| `/api/config` | GET / POST | `apiProfiles` (GET: `name`, `baseUrl`, `hasKey`, read-only; POST: `key`, `clearKey`), `apiActive`, `apiIntervalSec`, `brightness`; `password` + `newPassword`. The API key is write-only: GET returns only `hasKey`; in POST a non-empty `key` is stored, `"clearKey":true` deletes it, otherwise the stored key stays |
 | `/api/apitest` | POST / GET | POST `{"slot":0}` starts a connection test of a saved profile (`202`), GET returns `state` (`idle` / `running` / `done`), `ok`, `httpCode`, `text`, `data` |
 | `/api/screen` | POST | `{"index":0}` or `{"step":1}` |
 | `/api/scan` | GET | WiFi networks in range |
@@ -109,21 +109,25 @@ The dashboard shows `GET {baseUrl}/IotDashboard/PoirotComputers` with the
 header `X-Api-Key: <key>`; the answer is JSON
 `{"total":42,"waiting":0,"running":42,"warning":0,"error":0}`.
 
-- **Base URL** has the form `https://<api-host>/<Environment>`. The firmware adds
-  the endpoint path; a pasted full URL is trimmed to the base. The real address
-  and the key belong only in the device's web page, never into this repository.
-- **Profiles:** three slots, e.g. one per environment (the key differs in each).
-  The active profile is chosen on the web page; switching drops the old data and
-  fetches at once. An empty URL removes the profile together with its key.
-- **API key:** stored in NVS in the clear (like the WiFi password), never
-  returned by the device and never written to the serial log.
+- **Profiles:** three fixed profiles in `API_PROFILE_LIST` in [Config.h](Config.h)
+  (DeveProduction, DeveStaging, Production; base URL `https://<api-host>/<Environment>`,
+  the firmware adds the endpoint path). The addresses are in the public
+  repository, they are not secrets; the API key is. Changing an address means a
+  new build and an OTA update. Only `https://` is accepted (compile-time check).
+- **Active profile:** chosen on the web page (default Production, also after a
+  factory reset); switching drops the old data and fetches at once.
+- **API key:** one per profile, entered on the web page (an empty field keeps the
+  stored key, the "delete key" checkbox removes it). Stored in NVS in the clear
+  (like the WiFi password), never returned by the device and never written to the
+  serial log.
 - **TLS:** the server certificate is **verified** against the CA bundle built
   into the ESP32 core (`useBuiltinCACertBundle()`), so the key cannot be sniffed
   by a fake server. Emergency switch: `NET_TLS_INSECURE` in [Config.h](Config.h).
 - **Task:** the download runs in its own FreeRTOS task ([DevOpsApi.cpp](DevOpsApi.cpp));
   a TLS handshake plus response can take over 20 s, so `loop()` and the display
   never wait for it. After a network error or a 5xx it retries after 5 s.
-- Upgrading from 0.1.0: the single stored URL becomes profile 1 ("Default").
+- Upgrading from a build with free profiles: the old profiles and keys are deleted
+  at start, enter the keys again.
 
 ## How it works
 

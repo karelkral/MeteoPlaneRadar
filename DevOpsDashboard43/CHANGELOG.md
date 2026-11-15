@@ -13,8 +13,11 @@ The dashboard shows real data: the Poirot computers from the REST API.
   emergency switch), last TLS error in the log. The key is never logged.
 - Fix: `Net_ReadBody` could not terminate a body that was exactly as long as
   announced in `Content-Length`.
-- Settings: three API profiles (name, base URL, key) and the active one; the
-  key is write-only. The single `apiUrl` of 0.1.0 moves to profile 1.
+- Settings: three **fixed** API profiles (`API_PROFILE_LIST` in `Config.h`,
+  checked at compile time: `https://` only); NVS holds just the active profile
+  (`apiProf`, default Production) and the key of each (`akey0..2`, write-only).
+  Old free profiles (`apN*`, `apU*`, `apK*`, `apAct`, `apiUrl`) are removed at
+  start and the keys have to be entered again.
 - `Status` is thread-safe (written by the API task, read by the web server).
 - Dashboard: ring of Running / Waiting / Warning / Error with the server total,
   grey ring for missing or old data, status line (age or error).
@@ -29,7 +32,8 @@ The dashboard shows real data: the Poirot computers from the REST API.
   DMA interrupt - a bug of ESP-IDF 5.5.5 (espressif/esp-idf#19070). The
   driver's bounce buffer count is reset at every VSYNC, as the upstream fix
   does; a lost interrupt now costs one frame. `/api/status` has `panelResyncs`.
-- Web: DevOps API section with profiles, active profile, interval and a Test
+- Web: DevOps API section with the fixed profiles, API key (with a "delete key"
+  checkbox), active profile, interval and a Test
   button per profile (`/api/apitest`); `/api/status` has `apiDetail`.
 - Dashboard look (widget plan "Poirot computers"): thin ring (radius 140-175),
   `Error / Total` in the middle instead of the total, no percentages on the

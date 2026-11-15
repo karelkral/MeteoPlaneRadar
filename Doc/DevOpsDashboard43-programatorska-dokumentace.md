@@ -322,7 +322,7 @@ Handlery se registrují jednou; při přechodu AP → STA se jen přepne DNS / m
 | --- | --- | --- |
 | `/` | GET | stránka nastavení ([WebPage.h](../DevOpsDashboard43/WebPage.h)) |
 | `/api/status` | GET | `version`, `board`, `ip`, `ssid`, `rssi`, `uptime`, `heap`, `heapLargest`, `psram`, `lvglAgeMs`, `frames`, `resetReason`, `app`, `time`, `screen`, `api`, `ntp` |
-| `/api/config` | GET / POST | `apiUrl`, `apiIntervalSec`, `brightness`; heslo `password` + `newPassword`; GET navíc seznam sítí (bez hesel) |
+| `/api/config` | GET / POST | `apiProfiles` (GET: `name`, `baseUrl`, `hasKey`; POST: `key`, `clearKey`), `apiActive`, `apiIntervalSec`, `brightness`; heslo `password` + `newPassword`; GET navíc seznam sítí (bez hesel) |
 | `/api/screen` | POST | `{"index":n}` nebo `{"step":±1}` – jen fronta, provede `loop()` |
 | `/api/scan` | GET | sítě v dosahu (v AP z cache) |
 | `/api/wifi` | POST | `{"ssid","pass"}` – uložit a připojit |
@@ -368,12 +368,15 @@ bezpečné → volat jen z `loop()` / `setup()` / web handlerů (vše stejný ta
 | `wpass`, `wpass1`, `wpass2` | string | hesla | ihned |
 | `bl` | u8 | jas 0–100 | odloženě (2 s) |
 | `scr` | u8 | poslední obrazovka | odloženě (2 s) |
-| `apiUrl` | string | URL REST API (`http(s)://`, max. 200 znaků) | ihned |
+| `akey0`, `akey1`, `akey2` | string | API klíč profilu (profily jsou pevně v `API_PROFILE_LIST` v [Config.h](../DevOpsDashboard43/Config.h)) | ihned |
+| `apiProf` | u8 | aktivní profil (výchozí `API_PROFILE_DEFAULT` = Production) | ihned |
 | `apiInt` | u16 | interval 5–3600 s | ihned |
 | `pw` | string | heslo správce | ihned |
 
 Odložený zápis (`Settings_Tick`) šetří flash při tahání posuvníku. Tovární reset
-(`Settings_ClearAll`) smaže celý jmenný prostor.
+(`Settings_ClearAll`) smaže celý jmenný prostor a vrátí aktivní profil Production. Při startu se
+mažou staré klíče z vývojových sestavení 0.2.0 (`apN*`, `apU*`, `apK*`, `apAct`, `apiUrl`);
+API klíče je pak nutné zadat znovu.
 
 ## 12. Čas
 
