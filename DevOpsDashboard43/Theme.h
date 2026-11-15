@@ -19,6 +19,6 @@
 #define COL_ACCENT    lv_color_hex(0x26C6DA)   // titles
 #define COL_RUNNING   lv_color_hex(0x4CAF50)   // green
 #define COL_WAITING   lv_color_hex(0x42A5F5)   // blue
-#define COL_WARNING   lv_color_hex(0xFFC107)   // yellow
+#define COL_WARNING   lv_color_hex(0xD29922)   // amber
 #define COL_ERROR     lv_color_hex(0xF44336)   // red
 #define COL_STALE     lv_color_hex(0x757575)   // old or missing data

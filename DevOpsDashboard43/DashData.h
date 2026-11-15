@@ -8,14 +8,14 @@
 #include <stdint.h>
 
 enum DashStatus : uint8_t {
-  DASH_RUNNING,
   DASH_WAITING,
+  DASH_RUNNING,
   DASH_WARNING,
   DASH_ERROR,
   DASH_STATUS_COUNT
 };
 
 static inline const char* DashData_Name(uint8_t s) {
-  static const char* const NAMES[DASH_STATUS_COUNT] = { "Running", "Waiting", "Warning", "Error" };
+  static const char* const NAMES[DASH_STATUS_COUNT] = { "Waiting", "Running", "Warning", "Error" };
   return s < DASH_STATUS_COUNT ? NAMES[s] : "?";
 }

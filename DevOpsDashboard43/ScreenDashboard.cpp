@@ -151,7 +151,7 @@ void ScreenDashboard_SetData(const ApiSnapshot& s) {
   statusLine(s, ageS, line, sizeof(line));
   if (strcmp(lv_label_get_text(s_status), line) != 0) lv_label_set_text(s_status, line);
 
-  const uint16_t cnt[DASH_STATUS_COUNT] = { s.running, s.waiting, s.warning, s.error };
+  const uint16_t cnt[DASH_STATUS_COUNT] = { s.waiting, s.running, s.warning, s.error };
   uint32_t key = (s.valid ? 1u : 0u) | (stale ? 2u : 0u) | ((uint32_t)s.total << 8);
   for (int i = 0; i < DASH_STATUS_COUNT; i++) key = key * 31u + cnt[i];
   static uint32_t lastKey = 0;
