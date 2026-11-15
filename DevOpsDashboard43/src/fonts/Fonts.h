@@ -6,7 +6,7 @@
 //
 //  inter_20/24/32   Regular, printable ASCII + degree sign, middle dot, en dash
 //  inter_sb_24      SemiBold, digits and "%"  (percentages on the ring)
-//  inter_sb_72      SemiBold, digits and "-"  (total in the middle of the ring)
+//  inter_sb_72      SemiBold, digits, " ", "/" and "-"  ("Error / Total" in the middle of the ring)
 //  inter_sb_160     SemiBold, digits, ":" and "-" (the clock)
 // =============================================================================
 #pragma once

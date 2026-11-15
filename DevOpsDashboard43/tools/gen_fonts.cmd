@@ -24,10 +24,8 @@ pushd "%WORK%"
 %CONV% --size 20 --font %REG% %TEXT% -o inter_20.c || exit /b 1
 %CONV% --size 24 --font %REG% %TEXT% -o inter_24.c || exit /b 1
 %CONV% --size 32 --font %REG% %TEXT% -o inter_32.c || exit /b 1
-rem Percent sign and digits - percentages on the ring
-%CONV% --size 24 --font %SEMI% -r 0x25,0x30-0x39 -o inter_sb_24.c || exit /b 1
-rem Minus and digits - total in the middle of the ring
-%CONV% --size 72 --font %SEMI% -r 0x2D,0x30-0x39 -o inter_sb_72.c || exit /b 1
+rem Space, minus, slash and digits - "Error / Total" in the middle of the ring
+%CONV% --size 72 --font %SEMI% -r 0x20,0x2D,0x2F,0x30-0x39 -o inter_sb_72.c || exit /b 1
 rem Minus, digits and colon - the clock
 %CONV% --size 160 --font %SEMI% -r 0x2D,0x30-0x3A -o inter_sb_160.c || exit /b 1
 popd
