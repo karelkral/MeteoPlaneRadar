@@ -120,16 +120,19 @@ static void handlePostConfig() {
     }
   }
 
-  // API keys: {apiProfiles:[{key?}], apiActive}. A missing or empty key keeps the
-  // stored one. Validated here rather than silently ignored, so the page can
-  // say which profile was wrong. Name and URL are fixed in the firmware.
+  // API keys: {apiProfiles:[{key?, clearKey?}], apiActive}. A non-empty key is
+  // stored, clearKey:true deletes it, otherwise the stored key stays. Validated
+  // here rather than silently ignored, so the page can say which profile was
+  // wrong. Name and URL are fixed in the firmware and ignored.
   JsonVariantConst profs = doc["apiProfiles"];
   if (profs.is<JsonArrayConst>()) {
     uint8_t slot = 0;
     for (JsonVariantConst p : profs.as<JsonArrayConst>()) {
       if (slot >= API_PROFILES) break;
       const char* key = p["key"].as<const char*>();
-      if (key && *key && !Settings_SetApiKey(slot, key)) {
+      const bool clear = p["clearKey"].as<bool>();
+      const bool set   = key && key[strspn(key, " ")];      // blanks only = not typed
+      if ((set || clear) && !Settings_SetApiKey(slot, set ? key : "")) {
         char what[16];
         snprintf(what, sizeof(what), "apiProfile%u", (unsigned)slot);
         DevOpsApi_ApplySettings();               // earlier slots of this request are saved
