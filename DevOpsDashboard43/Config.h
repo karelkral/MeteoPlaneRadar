@@ -45,12 +45,19 @@
 #define AP_PASSWORD ""     // "" = open network
 
 // ---------------------------------------------------------------------------
-//  DevOps REST API (profiles and key are stored in the settings)
+//  DevOps REST API (profiles are fixed here, only the keys are stored)
 //
-//  Three profiles (name, base URL, API key); the active one is chosen in the
-//  web UI. The firmware appends API_PATH_POIROT to the base URL.
+//  Three fixed profiles {name, base URL}; the settings hold just the active
+//  profile and the API key of each one. The URLs are https:// only, without a
+//  trailing '/' (checked at compile time in Settings.cpp). The firmware appends
+//  API_PATH_POIROT to the base URL.
 // ---------------------------------------------------------------------------
 #define API_PROFILES           3
+#define API_PROFILE_LIST \
+  { "DeveProduction", "https://tfsstage.devops.scia.cz/deveproduction" }, \
+  { "DeveStaging",    "https://tfsstage.devops.scia.cz/devestaging" }, \
+  { "Production",     "https://tfs.devops.scia.cz/Production" }
+#define API_PROFILE_DEFAULT    2            // index in API_PROFILE_LIST: Production
 #define API_PROFILE_NAME_MAX   20
 #define API_URL_MAX            200          // base URL
 #define API_KEY_MAX            128
