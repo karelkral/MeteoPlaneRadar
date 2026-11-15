@@ -56,7 +56,7 @@
 #define API_PROFILE_LIST \
   { "DeveProduction", "https://tfsstage.devops.scia.cz/deveproduction" }, \
   { "DeveStaging",    "https://tfsstage.devops.scia.cz/devestaging" }, \
-  { "Production",     "https://tfs.devops.scia.cz/Production" }
+  { "Production",     "https://tfs.devops.scia.cz/production" }
 #define API_PROFILE_DEFAULT    2            // index in API_PROFILE_LIST: Production
 #define API_PROFILE_NAME_MAX   20
 #define API_URL_MAX            200          // base URL
