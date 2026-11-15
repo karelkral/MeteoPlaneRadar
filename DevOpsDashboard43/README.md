@@ -14,7 +14,7 @@ Plan and progress: [../Doc/DevOpsDashboard43-plan.md](../Doc/DevOpsDashboard43-p
 
 | # | Screen | Content |
 | --- | --- | --- |
-| 0 | Dashboard | thin ring chart of the **Poirot computers** from the REST API (Waiting blue, Running green, Warning amber, Error red), `Error / Total` in the middle, the legend with counts and a status line (age of the data or the error) |
+| 0 | Dashboard | thin ring chart of the **Poirot computers** from the REST API (Waiting blue, Running green, Warning yellow, Error red), `Error / Total` in the middle, the legend with counts and a status line (age of the data or the error) |
 | 1 | Clock | large time and date |
 
 **Swipe left / right** switches between them; the dots in the status bar show

@@ -228,7 +228,7 @@ ApiSnapshot DevOpsApi_Get();                       // odkudkoli, vrací kopii
 - `DashData.h`: stavy `DASH_WAITING, DASH_RUNNING, DASH_WARNING, DASH_ERROR` (pořadí výsečí po směru
   hodin od 12 h), názvy „Waiting / Running / Warning / Error“, `total` ze serveru. `DashData_Test()` smazat.
 - `Theme.h`: `COL_RUNNING` zelená (dnešní `COL_OK`), `COL_WAITING` modrá (např. `0x42A5F5`),
-  `COL_WARNING` jantarová `0xD29922` (dnešní `COL_RUN`), `COL_ERROR` červená (dnešní `COL_FAIL`), `COL_STALE` šedá.
+  `COL_WARNING` žlutá `0xFFC107` (dnešní `COL_RUN`), `COL_ERROR` červená `0xF44336` (dnešní `COL_FAIL`), `COL_STALE` šedá.
 - `ScreenDashboard`:
   - uprostřed `Error / Total` s popiskem „Error / Total“; nadpis „Poirot computers“ je v liště
   - `SetData(const ApiSnapshot&)`: bez dat šedý prázdný prstenec a „- / -“; stará data (chyba nebo

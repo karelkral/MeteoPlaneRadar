@@ -31,7 +31,7 @@ Napojení na API zůstává v [plánu REST API](DevOpsDashboard43-REST-API-plan.
 | Stavy v [DashData.h](../DevOpsDashboard43/DashData.h) | Succeeded, Failed, Running, Canceled | **Waiting, Running, Warning, Error** a pole `total` |
 | Testovací data | `{42, 7, 5, 3}` | `{4, 37, 0, 1}`, total 42 (jako obrázek) |
 | Pořadí výsečí | – | po směru hodin od 12 h: Waiting → Running → Warning → Error. Error končí těsně vlevo od vrcholu. |
-| Barvy v [Theme.h](../DevOpsDashboard43/Theme.h) | `COL_OK/FAIL/RUN/CANCEL` | `COL_WAITING` modrá (`0x42A5F5`), `COL_RUNNING` zelená, `COL_WARNING` jantarová (`0xD29922`), `COL_ERROR` červená; staré názvy se přejmenují |
+| Barvy v [Theme.h](../DevOpsDashboard43/Theme.h) | `COL_OK/FAIL/RUN/CANCEL` | `COL_WAITING` modrá (`0x42A5F5`), `COL_RUNNING` zelená, `COL_WARNING` žlutá (`0xFFC107`), `COL_ERROR` červená (`0xF44336`); staré názvy se přejmenují |
 | Prstenec | poloměr 115–175 (tlustý), procenta ve výsečích | vnitřní poloměr ~140, vnější 175 (tloušťka ~35 px). Kód procent (`s_pct`, `lv_text_get_size`, goniometrie) se smaže. Mezera 1–2° mezi výsečemi zůstane. |
 | Střed | celkový počet + „pipelines / 24h“ | „1 / 42“ + popisek „Error / Total“ (šedě) |
 | Nadpis | „DevOps dashboard“ (`TITLES[0]` v [Ui.cpp](../DevOpsDashboard43/Ui.cpp)) | „Poirot computers“ |
