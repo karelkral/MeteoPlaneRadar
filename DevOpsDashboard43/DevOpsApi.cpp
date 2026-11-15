@@ -219,9 +219,9 @@ bool DevOpsApi_StartTest(uint8_t slot) {
   if (s_test.state != API_TEST_RUNNING) {
     memset(&s_test, 0, sizeof(s_test));
     s_test.slot = slot;
-    if (!p.baseUrl[0] || !p.key[0]) {
+    if (!p.key[0]) {
       s_test.state = API_TEST_DONE;
-      copyStr(s_test.text, sizeof(s_test.text), p.baseUrl[0] ? "no API key" : "no URL");
+      copyStr(s_test.text, sizeof(s_test.text), "no API key");
     } else {
       copyStr(s_testUrl, sizeof(s_testUrl), p.baseUrl);
       copyStr(s_testKey, sizeof(s_testKey), p.key);
