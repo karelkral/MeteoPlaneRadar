@@ -246,6 +246,7 @@ static void handleStatus() {
   // dozen) and frames sent to the panel since boot (grows by ~39 a second).
   doc["lvglAgeMs"] = LvPort_BeatAgeMs();
   doc["frames"]    = LvPort_FrameCount();
+  doc["panelResyncs"] = LvPort_PanelResyncs();
   doc["resetReason"] = resetReason();
   // Which OTA slot runs - flips between app0 and app1 with every update.
   const esp_partition_t* run = esp_ota_get_running_partition();

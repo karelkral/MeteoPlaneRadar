@@ -5,6 +5,7 @@
 #include "LvPort.h"
 #include <Arduino.h>
 #include <esp_display_panel.hpp>
+#include <esp_lcd_panel_rgb.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -38,12 +39,65 @@ static uint32_t tickCb() { return millis(); }
 // End of a frame (ISR). Counts the frame for the display watchdog and wakes
 // the LVGL task waiting in flushCb(). It fires on every frame; flushCb() drops
 // the counts that piled up before it waited.
-IRAM_ATTR static bool frameDoneIsr(void*) {
+IRAM_ATTR static bool frameDoneIsr(esp_lcd_panel_handle_t, const esp_lcd_rgb_panel_event_data_t*, void*) {
   s_frames = s_frames + 1;
   BaseType_t woken = pdFALSE;
   if (s_task) vTaskNotifyGiveFromISR(s_task, &woken);
   return woken == pdTRUE;
 }
+
+// --- Workaround for a bounce buffer bug of ESP-IDF 5.5.5 (core 3.3.12) -------
+//
+// The driver picks the bounce buffer to refill by counting DMA EOF interrupts
+// (bb_eof_count % 2). When interrupts on the panel's core are blocked for about
+// one bounce period (a flash write, WiFi start, a long critical section), two
+// EOFs merge into one and the count goes odd. CONFIG_LCD_RGB_RESTART_IN_VSYNC
+// restarts the DMA from bounce buffer 0 at every VSYNC but does not reset the
+// count, so from then on every block lands in the wrong buffer: the whole
+// picture stays shifted by one block until another lost EOF flips it back.
+// Fixed upstream (espressif/esp-idf#19070) by zeroing the count before the
+// restart; on_vsync runs right before it, so it does the same here.
+// The field is private: it is found next to our own callbacks in the driver's
+// struct, and the workaround stays off unless the neighbours check out.
+static volatile size_t* s_bbEofCount = nullptr;
+static size_t           s_bbPerFrame = 0;
+static volatile uint32_t s_resyncs = 0;
+static int               s_cbCtx;          // address only - marks user_ctx in the struct
+
+IRAM_ATTR static bool vsyncIsr(esp_lcd_panel_handle_t, const esp_lcd_rgb_panel_event_data_t*, void*) {
+  volatile size_t* cnt = s_bbEofCount;
+  if (cnt) {
+    if (*cnt != s_bbPerFrame) s_resyncs = s_resyncs + 1;
+    *cnt = 0;
+  }
+  return false;
+}
+
+// esp_rgb_panel_t (v5.5.5) has, in this order: bb_eof_count, expect_eof_count,
+// on_color_trans_done, on_frame_buf_complete, on_vsync, on_bounce_empty, user_ctx.
+static void installPanelCallbacks(esp_lcd_panel_handle_t panel, size_t bbPerFrame) {
+  esp_lcd_rgb_panel_event_callbacks_t cb = {};
+  cb.on_frame_buf_complete = frameDoneIsr;
+  cb.on_vsync = vsyncIsr;
+  if (esp_lcd_rgb_panel_register_event_callbacks(panel, &cb, &s_cbCtx) != ESP_OK) {
+    Serial.println("LvPort: cannot register the panel callbacks");
+    return;
+  }
+  const uintptr_t* w = (const uintptr_t*)panel;     // base is the first member
+  for (int i = 4; i < 160; i++) {
+    if (w[i] == (uintptr_t)vsyncIsr && w[i - 1] == (uintptr_t)frameDoneIsr &&
+        w[i - 2] == 0 && w[i + 1] == 0 && w[i + 2] == (uintptr_t)&s_cbCtx &&
+        w[i - 3] == bbPerFrame) {
+      s_bbPerFrame = bbPerFrame;
+      s_bbEofCount = (volatile size_t*)&w[i - 4];
+      Serial.println("LvPort: bounce buffer resync installed");
+      return;
+    }
+  }
+  Serial.println("LvPort: driver layout unknown - bounce buffer resync NOT installed");
+}
+
+uint32_t LvPort_PanelResyncs() { return s_resyncs; }
 
 static void flushCb(lv_display_t* disp, const lv_area_t*, uint8_t* pxMap) {
   // DIRECT mode: the pixels are already in place in the hidden buffer. After
@@ -136,7 +190,8 @@ bool LvPort_Begin() {
     Serial.println("LvPort: no touch controller");
   }
 
-  s_lcd->attachRefreshFinishCallback(frameDoneIsr, nullptr);
+  installPanelCallbacks(s_lcd->getRefreshPanelHandle(),
+                        (size_t)w * h / (w * LVPORT_BOUNCE_LINES));
   s_beatMs = millis();
   TaskHandle_t task = nullptr;
   if (xTaskCreatePinnedToCore(lvglTask, "lvgl", LVPORT_TASK_STACK, nullptr,

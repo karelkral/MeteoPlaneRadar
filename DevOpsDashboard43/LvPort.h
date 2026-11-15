@@ -43,6 +43,10 @@ uint32_t LvPort_BeatAgeMs();
 // Stops moving when the panel stops scanning - for a watchdog.
 uint32_t LvPort_FrameCount();
 
+// VSYNCs at which the panel driver's bounce buffer count was off (an EOF
+// interrupt was lost) and had to be resynchronised - see LvPort.cpp.
+uint32_t LvPort_PanelResyncs();
+
 lv_display_t* LvPort_Display();
 
 // Stop the RGB panel, then restart. A plain ESP.restart() hangs on this board
