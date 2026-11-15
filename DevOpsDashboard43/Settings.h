@@ -33,24 +33,22 @@ uint8_t Settings_Backlight();
 void    Settings_SetBacklight(uint8_t pct);      // debounced write
 
 // --- DevOps REST API --------------------------------------------------------
-// Up to API_PROFILES server profiles (e.g. one per environment); the active one
-// is what the dashboard fetches. The key is write-only for the outside world:
-// the web page only learns whether one is stored.
+// The API_PROFILES profiles are fixed in Config.h (API_PROFILE_LIST); only the
+// key of each and the active profile are stored. The active one is what the
+// dashboard fetches. The key is write-only for the outside world: the web page
+// only learns whether one is stored.
 struct ApiProfile {                       // read-only from outside
-  char name[API_PROFILE_NAME_MAX + 1];
-  char baseUrl[API_URL_MAX + 1];          // without the endpoint path
+  const char* name;                       // from API_PROFILE_LIST
+  const char* baseUrl;                    // from API_PROFILE_LIST, without the endpoint path
   char key[API_KEY_MAX + 1];
 };
 
 const ApiProfile& Settings_ApiProfile(uint8_t slot);
 uint8_t     Settings_ApiActive();                       // 0..API_PROFILES-1
 void        Settings_SetApiActive(uint8_t slot);
-// key == nullptr keeps the stored key; an empty baseUrl clears the slot (key
-// included). The base URL is trimmed, a trailing '/' and a pasted
-// API_PATH_POIROT are removed. Returns false when refused: the URL does not
-// start with http:// / https://, or a value is too long.
-bool        Settings_SetApiProfile(uint8_t slot, const char* name,
-                                   const char* baseUrl, const char* key);
+// Stores the key of a profile (trimmed); an empty or null key deletes it.
+// Returns false when refused: bad slot or the key is longer than API_KEY_MAX.
+bool        Settings_SetApiKey(uint8_t slot, const char* key);
 uint16_t    Settings_ApiIntervalSec();
 void        Settings_SetApiIntervalSec(uint16_t s); // clamped to API_INTERVAL_S_MIN..MAX
 

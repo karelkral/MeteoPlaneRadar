@@ -22,7 +22,39 @@ static const char* const PASS_KEY[WIFI_SLOTS] = { "wpass", "wpass1", "wpass2" };
 static uint8_t  s_bri = BACKLIGHT_DEFAULT;
 static uint16_t s_apiInt = API_INTERVAL_S_DEFAULT;
 static ApiProfile s_prof[API_PROFILES] = {};
-static uint8_t    s_apiAct = 0;
+static uint8_t    s_apiAct = API_PROFILE_DEFAULT;
+
+// --- Fixed API profiles (Config.h), checked at compile time ---
+struct ApiFixed { const char* name; const char* url; };
+static constexpr ApiFixed API_FIXED[] = { API_PROFILE_LIST };
+
+static constexpr size_t cLen(const char* s) { return *s ? 1 + cLen(s + 1) : 0; }
+static constexpr bool cHasHttps(const char* s) {
+  return s[0] == 'h' && s[1] == 't' && s[2] == 't' && s[3] == 'p' && s[4] == 's' &&
+         s[5] == ':' && s[6] == '/' && s[7] == '/' && s[8] != '\0';
+}
+static constexpr bool fixedProfilesValid() {
+  for (size_t i = 0; i < API_PROFILES; i++) {
+    const size_t nl = cLen(API_FIXED[i].name), ul = cLen(API_FIXED[i].url);
+    if (nl < 1 || nl > API_PROFILE_NAME_MAX) return false;
+    if (!cHasHttps(API_FIXED[i].url) || ul > API_URL_MAX || API_FIXED[i].url[ul - 1] == '/') return false;
+  }
+  return true;
+}
+static_assert(sizeof(API_FIXED) / sizeof(API_FIXED[0]) == API_PROFILES,
+              "API_PROFILE_LIST must have API_PROFILES entries");
+static_assert(fixedProfilesValid(),
+              "API_PROFILE_LIST: name 1..API_PROFILE_NAME_MAX, https:// URL without a trailing '/' that fits API_URL_MAX");
+static_assert(API_PROFILE_DEFAULT < API_PROFILES, "API_PROFILE_DEFAULT out of range");
+
+static void resetProfiles() {
+  for (uint8_t i = 0; i < API_PROFILES; i++) {
+    s_prof[i].name    = API_FIXED[i].name;
+    s_prof[i].baseUrl = API_FIXED[i].url;
+    s_prof[i].key[0]  = '\0';
+  }
+  s_apiAct = API_PROFILE_DEFAULT;
+}
 
 // --- UI state ---
 static uint8_t  s_scr = UI_SCREEN_DASHBOARD;
@@ -52,47 +84,46 @@ static uint16_t clampInterval(uint16_t s) {
   return s;
 }
 
-// NVS keys of an API profile: apN0..2 (name), apU0..2 (base URL), apK0..2 (key).
-static void profKey(char* out, char kind, uint8_t slot) {
-  snprintf(out, 6, "ap%c%u", kind, (unsigned)slot);
+// NVS keys: akey0..2 (API key of a profile), apiProf (active profile).
+static void keyName(char* out, uint8_t slot) {
+  snprintf(out, 6, "akey%u", (unsigned)slot);
 }
 
-// Trims blanks at both ends and drops trailing '/', then the endpoint path when
-// the whole URL was pasted. Returns false when the result does not fit.
-static bool normalizeBaseUrl(const char* in, char* out, size_t cap) {
-  if (!in) in = "";
-  while (*in == ' ') in++;
-  size_t n = strlen(in);
-  while (n && (in[n - 1] == ' ' || in[n - 1] == '/')) n--;
-  const size_t pl = strlen(API_PATH_POIROT);
-  if (n >= pl && strncasecmp(in + n - pl, API_PATH_POIROT, pl) == 0) {
-    n -= pl;
-    while (n && (in[n - 1] == ' ' || in[n - 1] == '/')) n--;
-  }
-  if (n >= cap) return false;
-  memcpy(out, in, n);
-  out[n] = '\0';
-  return true;
-}
-
-static void storeProfile(uint8_t slot) {
+static void storeKey(uint8_t slot) {
   char k[6];
-  if (!prefs.begin(NS, false)) { Serial.println("Settings: NVS open failed, API profile not stored"); return; }
-  profKey(k, 'N', slot); prefs.putString(k, s_prof[slot].name);
-  profKey(k, 'U', slot); prefs.putString(k, s_prof[slot].baseUrl);
-  profKey(k, 'K', slot); prefs.putString(k, s_prof[slot].key);
+  keyName(k, slot);
+  if (!prefs.begin(NS, false)) { Serial.println("Settings: NVS open failed, API key not stored"); return; }
+  prefs.putString(k, s_prof[slot].key);
   prefs.end();
 }
 
+// v0.2.0 development builds stored free profiles; they are replaced by the fixed
+// ones, so the old entries (keys included) are dropped and the keys re-entered.
+static void dropLegacyApiKeys() {
+  static const char* const LEGACY[] = { "apiUrl", "apAct" };
+  static const char kinds[] = { 'N', 'U', 'K' };
+  bool found = false;
+  if (!prefs.begin(NS, false)) return;
+  for (const char* k : LEGACY) if (prefs.isKey(k)) { prefs.remove(k); found = true; }
+  for (char kind : kinds) {
+    for (uint8_t i = 0; i < API_PROFILES; i++) {
+      char k[6];
+      snprintf(k, sizeof(k), "ap%c%u", kind, (unsigned)i);
+      if (prefs.isKey(k)) { prefs.remove(k); found = true; }
+    }
+  }
+  prefs.end();
+  if (found) Serial.println("Settings: old API profiles removed - enter the API keys again in the web UI");
+}
+
 void Settings_Begin() {
-  char legacyUrl[API_URL_MAX + 1] = "";
+  resetProfiles();
   if (prefs.begin(NS, true)) {
     s_bri    = prefs.getUChar("bl", BACKLIGHT_DEFAULT);
     s_apiInt = prefs.getUShort("apiInt", API_INTERVAL_S_DEFAULT);
     s_scr    = prefs.getUChar("scr", UI_SCREEN_DASHBOARD);
-    s_apiAct = prefs.getUChar("apAct", 0);
+    s_apiAct = prefs.getUChar("apiProf", API_PROFILE_DEFAULT);
     // isKey() first: getString() on a missing key logs an error line.
-    if (prefs.isKey("apiUrl")) prefs.getString("apiUrl", legacyUrl, sizeof(legacyUrl));
     if (prefs.isKey("pw"))     prefs.getString("pw", s_pw, sizeof(s_pw));
     for (int i = 0; i < WIFI_SLOTS; i++) {
       if (prefs.isKey(SSID_KEY[i])) prefs.getString(SSID_KEY[i], s_ssid[i], sizeof(s_ssid[i]));
@@ -100,29 +131,16 @@ void Settings_Begin() {
     }
     for (uint8_t i = 0; i < API_PROFILES; i++) {
       char k[6];
-      profKey(k, 'N', i); if (prefs.isKey(k)) prefs.getString(k, s_prof[i].name,    sizeof(s_prof[i].name));
-      profKey(k, 'U', i); if (prefs.isKey(k)) prefs.getString(k, s_prof[i].baseUrl, sizeof(s_prof[i].baseUrl));
-      profKey(k, 'K', i); if (prefs.isKey(k)) prefs.getString(k, s_prof[i].key,     sizeof(s_prof[i].key));
+      keyName(k, i);
+      if (prefs.isKey(k)) prefs.getString(k, s_prof[i].key, sizeof(s_prof[i].key));
     }
     prefs.end();
   }
   if (s_bri > 100) s_bri = BACKLIGHT_DEFAULT;
   if (s_scr >= UI_SCREEN_COUNT) s_scr = UI_SCREEN_DASHBOARD;
-  if (s_apiAct >= API_PROFILES) s_apiAct = 0;
+  if (s_apiAct >= API_PROFILES) s_apiAct = API_PROFILE_DEFAULT;
   s_apiInt = clampInterval(s_apiInt);
-
-  // Migration: the single URL of v0.1.0 becomes profile 0.
-  if (legacyUrl[0]) {
-    bool anyProfile = false;
-    for (uint8_t i = 0; i < API_PROFILES; i++) anyProfile |= s_prof[i].baseUrl[0] != '\0';
-    if (!anyProfile && normalizeBaseUrl(legacyUrl, s_prof[0].baseUrl, sizeof(s_prof[0].baseUrl))
-        && s_prof[0].baseUrl[0]) {
-      copyStr(s_prof[0].name, sizeof(s_prof[0].name), "Default");
-      storeProfile(0);
-      Serial.println("Settings: apiUrl moved to API profile 1");
-    }
-    if (prefs.begin(NS, false)) { prefs.remove("apiUrl"); prefs.end(); }
-  }
+  dropLegacyApiKeys();
 }
 
 // --- WiFi -------------------------------------------------------------------
@@ -210,43 +228,20 @@ uint8_t Settings_ApiActive() { return s_apiAct; }
 void Settings_SetApiActive(uint8_t slot) {
   if (slot >= API_PROFILES || slot == s_apiAct) return;
   s_apiAct = slot;
-  if (prefs.begin(NS, false)) { prefs.putUChar("apAct", s_apiAct); prefs.end(); }
+  if (prefs.begin(NS, false)) { prefs.putUChar("apiProf", s_apiAct); prefs.end(); }
 }
 
-bool Settings_SetApiProfile(uint8_t slot, const char* name, const char* baseUrl, const char* key) {
+bool Settings_SetApiKey(uint8_t slot, const char* key) {
   if (slot >= API_PROFILES) return false;
-
-  char url[API_URL_MAX + 1];
-  if (!normalizeBaseUrl(baseUrl, url, sizeof(url))) return false;
-  if (!url[0]) {                                   // empty URL clears the slot, key included
-    memset(&s_prof[slot], 0, sizeof(ApiProfile));
-    storeProfile(slot);
-    return true;
-  }
-  if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0) return false;
-
-  ApiProfile p = s_prof[slot];
-  copyStr(p.baseUrl, sizeof(p.baseUrl), url);
-
-  // Names and keys are trimmed: a blank pasted along would end up in the header.
-  const char* nm = name ? name : "";
-  while (*nm == ' ') nm++;
-  size_t nl = strlen(nm);
-  while (nl && nm[nl - 1] == ' ') nl--;
-  if (nl > API_PROFILE_NAME_MAX) return false;
-  if (nl) { memcpy(p.name, nm, nl); p.name[nl] = '\0'; }
-  else if (!p.name[0]) snprintf(p.name, sizeof(p.name), "Profile %u", (unsigned)slot + 1);
-
-  if (key) {
-    while (*key == ' ') key++;
-    size_t kl = strlen(key);
-    while (kl && key[kl - 1] == ' ') kl--;
-    if (kl > API_KEY_MAX) return false;
-    memcpy(p.key, key, kl);
-    p.key[kl] = '\0';
-  }
-  s_prof[slot] = p;
-  storeProfile(slot);
+  if (!key) key = "";
+  // A blank pasted along would end up in the header.
+  while (*key == ' ') key++;
+  size_t kl = strlen(key);
+  while (kl && key[kl - 1] == ' ') kl--;
+  if (kl > API_KEY_MAX) return false;
+  memcpy(s_prof[slot].key, key, kl);
+  s_prof[slot].key[kl] = '\0';
+  storeKey(slot);
   return true;
 }
 uint16_t Settings_ApiIntervalSec() { return s_apiInt; }
@@ -332,8 +327,7 @@ void Settings_Tick() {
 void Settings_ClearAll() {
   if (prefs.begin(NS, false)) { prefs.clear(); prefs.end(); }
   s_bri = BACKLIGHT_DEFAULT;
-  memset(s_prof, 0, sizeof(s_prof));
-  s_apiAct = 0;
+  resetProfiles();
   s_apiInt = API_INTERVAL_S_DEFAULT;
   s_scr = UI_SCREEN_DASHBOARD;
   s_pw[0] = '\0';
