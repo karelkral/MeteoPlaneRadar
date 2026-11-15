@@ -3,7 +3,7 @@
 > Související dokumenty: [plán DevOpsDashboard43](DevOpsDashboard43-plan.md),
 > [plán napojení na REST API](DevOpsDashboard43-REST-API-plan.md) (kap. 4.6).
 >
-> Stav: **plán**, neimplementováno. Plán vznikl 14. 11. 2026.
+> Stav: **implementováno** (verze 0.2.0). Plán vznikl 14. 11. 2026; stavy, barvy a data z API už v kódu byly, doplněn byl jen vzhled.
 
 Dashboard má vypadat jako referenční obrázek: tenký prstencový graf se čtyřmi stavy počítačů,
 uprostřed `Error / Total`, vpravo legenda. Rozsah této práce je **jen vzhled na testovacích datech**.

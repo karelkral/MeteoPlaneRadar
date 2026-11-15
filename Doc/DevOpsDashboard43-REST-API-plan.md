@@ -21,8 +21,8 @@ prostředími serveru, autorizovat se API klíčem, obnovovat se každých 30 s 
 | Autorizace | hlavička `X-Api-Key` (na serveru `ApiHeaderNames.ApiKey`) |
 | Prostředí | **3 profily** (název, base URL, API klíč). Aktivní profil se vybírá **jen ve webu**, displej ukazuje jen jeho název v liště. |
 | API klíč | jen pro zápis: web ho nikdy nevrací, ukazuje jen „nastaven / nenastaven“; prázdné pole = ponechat uložený |
-| Dashboard | prstencový graf místo pipelines ukazuje **Poirot počítače**: uprostřed `total`, popisek „Poirot computers“ |
-| Barvy | Running **zelená**, Waiting **modrá**, Warning **žlutá**, Error **červená** |
+| Dashboard | prstencový graf místo pipelines ukazuje **Poirot počítače**: uprostřed `Error / Total`, nadpis „Poirot computers“ je v liště (viz [plán widgetu](DevOpsDashboard43-widget-plan.md)) |
+| Barvy | Running **zelená**, Waiting **modrá**, Warning **jantarová**, Error **červená** |
 | Obnovení | automaticky podle intervalu (výchozí **30 s**, 5–3600 s); ručně **ikonou ⟳ v liště** |
 | TLS | **ověřovat certifikát** proti vestavěnému balíku kořenových CA v core (`useBuiltinCACertBundle()`) |
 | Stahování | vlastní FreeRTOS task; `loop()` a LVGL na síť nikdy nečekají |
@@ -220,13 +220,13 @@ ApiSnapshot DevOpsApi_Get();                       // odkudkoli, vrací kopii
 
 ### 4.6 Data a displej
 
-- `DashData.h`: stavy `DASH_RUNNING, DASH_WAITING, DASH_WARNING, DASH_ERROR` (pořadí výsečí po směru
-  hodin od 12 h), názvy „Running / Waiting / Warning / Error“, `total` ze serveru. `DashData_Test()` smazat.
+- `DashData.h`: stavy `DASH_WAITING, DASH_RUNNING, DASH_WARNING, DASH_ERROR` (pořadí výsečí po směru
+  hodin od 12 h), názvy „Waiting / Running / Warning / Error“, `total` ze serveru. `DashData_Test()` smazat.
 - `Theme.h`: `COL_RUNNING` zelená (dnešní `COL_OK`), `COL_WAITING` modrá (např. `0x42A5F5`),
-  `COL_WARNING` žlutá (dnešní `COL_RUN`), `COL_ERROR` červená (dnešní `COL_FAIL`), `COL_STALE` šedá.
+  `COL_WARNING` jantarová `0xD29922` (dnešní `COL_RUN`), `COL_ERROR` červená (dnešní `COL_FAIL`), `COL_STALE` šedá.
 - `ScreenDashboard`:
-  - popisek pod součtem „Poirot computers“
-  - `SetData(const ApiSnapshot&)`: bez dat šedý prázdný prstenec a „-“; stará data (chyba nebo
+  - uprostřed `Error / Total` s popiskem „Error / Total“; nadpis „Poirot computers“ je v liště
+  - `SetData(const ApiSnapshot&)`: bez dat šedý prázdný prstenec a „- / -“; stará data (chyba nebo
     stáří > `API_STALE_FACTOR × interval`) se vykreslí šedě
   - pod legendou řádek stavu (Inter 20, šedě): „updated 12 s ago“ / „401 bad API key“ / „API not configured“
 - `Ui` (lišta):
