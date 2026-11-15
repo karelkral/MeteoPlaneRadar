@@ -4,8 +4,8 @@
 > [doporučení: LVGL v Arduinu, kap. 4](DevOpsDashboard-doporuceni-LVGL.md#4-architektura-síť-ve-vlastním-tasku-ui-jen-pod-zámkem),
 > [výukový průvodce REST API](DevOpsDashboard-REST-API.md).
 >
-> Stav: **plán**, neimplementováno. Realizuje se po fázích 43.5 (spolehlivost) a 43.6 (dokumentace)
-> z [plánu DevOpsDashboard43](DevOpsDashboard43-plan.md). Plán vznikl 14. 11. 2026.
+> Stav: **hotovo** ve firmwaru 0.2.0, fáze 43.7–43.11 (14.–15. 11. 2026). Výsledky testů jsou
+> v kap. 7. Plán vznikl 14. 11. 2026.
 >
 > Repozitář je veřejný: skutečné adresy serveru a API klíč sem **nepatří**. V textu jsou
 > zástupné hodnoty `<api-host>` a `<Environment>`. Skutečné hodnoty se zadávají jen ve webu zařízení.
@@ -341,6 +341,29 @@ ApiSnapshot DevOpsApi_Get();                       // odkudkoli, vrací kopii
 | Tovární reset | profily i klíče smazané |
 | Paměť | `/api/status`: interní RAM po hodině stabilní, TLS handshake projde (heap guard) |
 | 24h běh | žádný restart watchdogem |
+
+### Výsledky (15. 11. 2026, firmware 0.2.0)
+
+| Test | Výsledek |
+| --- | --- |
+| Platný profil | ✅ data ~2 s po startu Wi-Fi, pak každých 30 s; stažení trvá 1,5–5 s |
+| ⟳ v liště | ✅ spinner místo ikony, data se obnoví |
+| Špatný klíč | ✅ `401 bad API key` (dashboard i Test ve webu) |
+| URL bez endpointu | ✅ `404 not found` |
+| Odpověď není JSON | ✅ `not JSON (wrong URL?)` (`Content-Type: text/html`) |
+| Přepnutí profilu ve webu | ✅ stará data zmizí, název v liště se změní, stáhne se hned |
+| Test ve webu | ✅ HTTP kód a data, dashboard beze změny |
+| `GET /api/config`, `/api/status`, sériová linka | ✅ klíč se nikde neobjeví (ověřeno s testovacím klíčem) |
+| Vložená celá URL | ✅ ořízne se na base URL |
+| Paměť | ✅ interní RAM mezi stahováními stabilní (~133 kB), během TLS o ~40 kB méně |
+| Občasná chyba sítě | ⚠️ asi 1 z 7 stažení skončí `-1` / `-11` (TLS nebo odpověď pomalejší než timeout); opakování za 5 s (`API_RETRY_MS`) to skryje |
+| Obraz při překreslování | ✅ po opravě: bounce buffer 20 řádků (s 10 řádky duchové a blikání, viz [programátorská dokumentace](DevOpsDashboard43-programatorska-dokumentace.md)) |
+| Trvalý posun obrazu | ✅ po opravě: nulování čítače bounce bufferů ve VSYNC (chyba ESP-IDF 5.5.5, espressif/esp-idf#19070). Zbývá krátké bliknutí jednoho snímku asi u 2 z 10 obnovení |
+| Výpadek Wi-Fi, tovární reset, 24h běh | ⏳ neověřeno |
+
+Nalezené chyby mimo plán: `Net_ReadBody` neukončilo tělo přesně tak dlouhé jako `Content-Length`
+(opraveno ve fázi 43.7); bounce buffer 10 řádků a trvalý posun obrazu po ztraceném přerušení DMA
+(chyba ESP-IDF 5.5.5) – obojí opraveno při ověřování ve fázi 43.11.
 
 ## 8. Rizika
 

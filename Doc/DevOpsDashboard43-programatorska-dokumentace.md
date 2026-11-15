@@ -169,9 +169,22 @@ z příkladu Waveshare `10_lvgl_v9_demo`, ale s jiným režimem vykreslování.
 1. `new Board()` + `init()` – ESP32_Display_Panel načte definici
    `BOARD_WAVESHARE_ESP32_S3_TOUCH_LCD_4_3` (piny RGB, časování 16 MHz, GT911, CH422G,
    podsvícení přes EXIO2).
-2. Před `begin()`: `configFrameBufferNumber(2)` a bounce buffer 10 řádků
-   (`configRGB_BounceBufferSize(800 × 10)`) v interní RAM – RGB periferie pak čte PSRAM po
-   blocích přes procesor, obraz je stabilnější při zátěži PSRAM.
+2. Před `begin()`: `configFrameBufferNumber(2)` a bounce buffer **20 řádků**
+   (`configRGB_BounceBufferSize(800 × 20)`, 2 × 32 kB) v interní RAM – RGB periferie pak čte
+   PSRAM po blocích přes procesor, obraz je stabilnější při zátěži PSRAM. Výchozích 10 řádků
+   z definice desky nestačilo: když LVGL kreslilo, přerušení občas nestihlo blok doplnit a panel
+   zopakoval starý obsah bufferu (řádky o 20 výš – duchové pod textem, čárky u prstence, blikání).
+   Po `begin()` si `LvPort` registruje callbacky panelu sám (`esp_lcd_rgb_panel_register_event_callbacks`):
+   konec snímku (`on_frame_buf_complete`, probouzí LVGL task) a `on_vsync` s obejitím chyby
+   ESP-IDF 5.5.5 ([espressif/esp-idf#19070](https://github.com/espressif/esp-idf/issues/19070)).
+   Ovladač vybírá bounce buffer k doplnění podle počtu přerušení DMA EOF (`bb_eof_count % 2`).
+   Když se jedno přerušení ztratí (zápis do flash, start Wi-Fi, zátěž web serveru na jádru 1),
+   restart ve VSYNC čítač nevynuluje a celý obraz zůstane posunutý o jeden blok. `on_vsync` běží
+   těsně před restartem a čítač nuluje (stejně jako oprava v ESP-IDF), takže ztracené přerušení
+   stojí jen jeden snímek. Pole je privátní: najde se ve struktuře ovladače podle sousedních polí
+   (naše callbacky, `user_ctx`, `expect_eof_count` = 24). Když nesedí, oprava se nezapne
+   (log „resync NOT installed“). Počet zásahů je v `/api/status` → `panelResyncs`
+   (několik při startu, pak zhruba jeden na deset stažení z API).
 3. `begin()` – zapne panel, expandér, dotyk, podsvícení.
 4. LVGL: `lv_init()`, tick z `millis()` (`lv_tick_set_cb`), displej 800×480 **RGB565**
    (`lv_display_set_color_format` **před** `lv_display_set_buffers`), buffery = oba framebuffery

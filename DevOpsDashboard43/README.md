@@ -14,12 +14,20 @@ Plan and progress: [../Doc/DevOpsDashboard43-plan.md](../Doc/DevOpsDashboard43-p
 
 | # | Screen | Content |
 | --- | --- | --- |
-| 0 | Dashboard | ring chart of pipeline results in the last 24 h with a legend (**test data** – no REST API yet) |
+| 0 | Dashboard | ring chart of the **Poirot computers** from the REST API (Running green, Waiting blue, Warning yellow, Error red), the total in the middle, the legend with counts and a status line (age of the data or the error) |
 | 1 | Clock | large time and date |
 
 **Swipe left / right** switches between them; the dots in the status bar show
 which one is active. The time comes from NTP (the HTTP `Date` header is a
 fallback for networks that block NTP).
+
+The status bar of the dashboard shows the name of the active API profile
+(`DevOps dashboard · Production`). The **⟳ icon** left of the clock refreshes
+the data at once; a small spinner replaces it while a download runs, and it is
+hidden when no profile is set up. The data refresh by themselves every 30 s (configurable). When the
+last download failed, or the data are older than three intervals, the ring turns
+grey and the status line says why (`401 bad API key`, `404 not found`,
+`not JSON (wrong URL?)`, `TLS / network error`, `offline`, ...).
 
 ## Build
 
@@ -73,7 +81,9 @@ line of the display, so it can only be read during that first second.
 `http://devopsdashboard43.local/` (or the IP address shown in the serial log):
 
 - **WiFi** – up to three remembered networks.
-- **DevOps API** – URL and refresh interval (stored; nothing is fetched yet).
+- **DevOps API** – three profiles (name, base URL, API key), the active one and
+  the refresh interval; **Test** next to each profile tries the saved profile
+  without changing the dashboard. Details below.
 - **Display** – brightness, previous / next screen. The board can only switch
   the backlight on or off, so brightness is a black layer over the picture;
   0 % switches the backlight off.
@@ -82,8 +92,9 @@ line of the display, so it can only be read during that first second.
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/api/status` | GET | version, board, IP, WiFi, time, heap, PSRAM, running OTA slot (`app`), display health (`lvglAgeMs`, `frames`), API and NTP state |
-| `/api/config` | GET / POST | `apiUrl`, `apiIntervalSec`, `brightness`; `password` + `newPassword` |
+| `/api/status` | GET | version, board, IP, WiFi, time, heap, PSRAM, running OTA slot (`app`), display health (`lvglAgeMs`, `frames`, `panelResyncs`), API text (`api`) and details (`apiDetail`: state, profile, HTTP code, error, age) and NTP state |
+| `/api/config` | GET / POST | `apiProfiles` (`name`, `baseUrl`, `hasKey` / `key`), `apiActive`, `apiIntervalSec`, `brightness`; `password` + `newPassword`. The API key is write-only: GET returns only `hasKey`, an empty or missing `key` in POST keeps the stored one |
+| `/api/apitest` | POST / GET | POST `{"slot":0}` starts a connection test of a saved profile (`202`), GET returns `state` (`idle` / `running` / `done`), `ok`, `httpCode`, `text`, `data` |
 | `/api/screen` | POST | `{"index":0}` or `{"step":1}` |
 | `/api/scan` | GET | WiFi networks in range |
 | `/api/wifi` | POST | `{"ssid":"..","pass":".."}` – remember and connect |
@@ -92,12 +103,47 @@ line of the display, so it can only be read during that first second.
 | `/api/reset` | POST | factory reset (`{"password":".."}` when one is set) |
 | `/update` | GET / POST | firmware update (HTTP Basic user `admin` when a password is set) |
 
+## DevOps API
+
+The dashboard shows `GET {baseUrl}/IotDashboard/PoirotComputers` with the
+header `X-Api-Key: <key>`; the answer is JSON
+`{"total":42,"waiting":0,"running":42,"warning":0,"error":0}`.
+
+- **Base URL** has the form `https://<api-host>/<Environment>`. The firmware adds
+  the endpoint path; a pasted full URL is trimmed to the base. The real address
+  and the key belong only in the device's web page, never into this repository.
+- **Profiles:** three slots, e.g. one per environment (the key differs in each).
+  The active profile is chosen on the web page; switching drops the old data and
+  fetches at once. An empty URL removes the profile together with its key.
+- **API key:** stored in NVS in the clear (like the WiFi password), never
+  returned by the device and never written to the serial log.
+- **TLS:** the server certificate is **verified** against the CA bundle built
+  into the ESP32 core (`useBuiltinCACertBundle()`), so the key cannot be sniffed
+  by a fake server. Emergency switch: `NET_TLS_INSECURE` in [Config.h](Config.h).
+- **Task:** the download runs in its own FreeRTOS task ([DevOpsApi.cpp](DevOpsApi.cpp));
+  a TLS handshake plus response can take over 20 s, so `loop()` and the display
+  never wait for it. After a network error or a 5xx it retries after 5 s.
+- Upgrading from 0.1.0: the single stored URL becomes profile 1 ("Default").
+
 ## How it works
 
 - [LvPort.cpp](LvPort.cpp) – ESP32_Display_Panel brings up the panel, touch and
   expander from its board definition. LVGL draws in **DIRECT** mode into two
   full-screen frame buffers in PSRAM that swap at the end of a frame (no
-  tearing, ~30 FPS, 2–3 ms of drawing per animation frame).
+  tearing, ~30 FPS, 2–3 ms of drawing per animation frame). The RGB peripheral
+  reads them through a 20-line bounce buffer in internal RAM (2 × 32 kB); with
+  10 lines the refill sometimes came too late while LVGL was drawing, and the
+  panel repeated rows from 20 lines higher (ghost text, streaks, flicker).
+- Bounce buffer resync: ESP-IDF 5.5.5 (in core 3.3.12) loses track of which
+  bounce buffer to refill after a single lost DMA interrupt (flash write, WiFi
+  start, load on the web server), and the whole picture then **stays shifted**
+  ([espressif/esp-idf#19070](https://github.com/espressif/esp-idf/issues/19070)).
+  [LvPort.cpp](LvPort.cpp) resets the driver's count at every VSYNC, as the
+  upstream fix does, so a lost interrupt costs a single frame (a short flash,
+  roughly one download in ten). `/api/status` counts them in `panelResyncs`.
+  Revisit when the core moves to an ESP-IDF with the fix: the workaround finds
+  the private field by its neighbours and switches itself off (serial log
+  "resync NOT installed") when the driver layout changes.
 - LVGL runs in its own task; `loop()` never draws and changes the UI only
   through `Ui_*` functions, which take the LVGL lock.
 - [Ui.cpp](Ui.cpp) – status bar, `lv_tileview` with the screens, overlays (WiFi
@@ -126,7 +172,7 @@ mostly the first one after the device has been idle for a minute or more. The
 device stays on the old firmware and keeps working – just try again, or flash
 over USB. Details and what to try next: the plan, phase 5.2.
 
-## Tested (0.1.0)
+## Tested (0.2.0)
 
 - display, touch, swipe, ~30 FPS without tearing
 - captive portal with QR code, WiFi scan, connect, reconnect after restart, NTP
@@ -134,9 +180,18 @@ over USB. Details and what to try next: the plan, phase 5.2.
 - settings writes to flash without picture glitches
 - factory reset with BOOT, restart from the web (`resetReason: software`)
 - LVGL watchdog (test build), OTA (works, see the known issue)
+- REST API: data every 30 s, verified TLS, `401` (wrong key), `404` (wrong
+  path), non-JSON answer, profile switch (old data dropped, fetched at once),
+  Test button, the key absent from `/api/config`, `/api/status` and the serial
+  log, stable heap between downloads (~133 kB free; ~40 kB less during TLS)
+- clean picture while the dashboard redraws (20-line bounce buffer); the picture
+  no longer stays shifted (VSYNC resync), about one refresh in ten shows a
+  single-frame flash
 
 Not tested yet: WiFi outage, a 24-hour run, the panel-stall branch of the
-watchdog.
+watchdog. On the development network about one download in seven needed a
+retry (TLS handshake or response slower than the timeouts); the retry after 5 s
+hides it.
 
 ## Licence
 

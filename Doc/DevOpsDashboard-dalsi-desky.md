@@ -80,7 +80,7 @@ Pořadí datových vodičů tak, jak je čeká `esp_lcd` (`data_gpio_nums[0..15]
 | HSYNC pulse / back porch / front porch | 4 / 8 / 8 |
 | VSYNC pulse / back porch / front porch | 4 / 8 / 8 |
 | `pclk_active_neg` | **1** (data na sestupnou hranu – kulaté desky mají 0) |
-| Bounce buffer | 10 řádků = 8000 px (384 000 / (2 × 8000) = 24, podmínka driveru splněna) |
+| Bounce buffer | 10 řádků = 8000 px (384 000 / (2 × 8000) = 24, podmínka driveru splněna). DevOpsDashboard43 na 4.3" potřeboval **20 řádků** (384 000 / (2 × 16 000) = 12), s 10 řádky se při kreslení LVGL objevovaly duchové řádků |
 | Délka snímku při 16 MHz | 820 × 500 = 410 000 taktů = 25,6 ms (~39 Hz) |
 
 ### Dotyk, I2C a expandér CH422G

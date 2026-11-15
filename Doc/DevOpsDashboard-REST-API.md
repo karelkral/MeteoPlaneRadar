@@ -11,6 +11,14 @@ Tento dokument vysvětluje:
 > (`DevOpsApi.cpp` + úprava `ScreenDashboard.cpp`), je **fáze 6** a zatím není napsaný.
 > Tento dokument popisuje jeho návrh.
 >
+> **DevOpsDashboard43 (0.2.0) je už napojený**, a to jinak, než popisují kapitoly 2 a 4:
+> endpoint `GET {baseUrl}/IotDashboard/PoirotComputers` s kontraktem
+> `{"total","waiting","running","warning","error"}`, autentizace hlavičkou **`X-Api-Key`**,
+> TLS **s ověřením certifikátu** (balík kořenových CA z core), 3 profily prostředí a stahování
+> ve vlastním FreeRTOS tasku. Popis: [plán napojení REST API](DevOpsDashboard43-REST-API-plan.md)
+> a [README](../DevOpsDashboard43/README.md#devops-api). Tento průvodce zůstává jako výklad
+> principů a návrh pro kulaté desky (DevOpsDashboard).
+>
 > Pro Waveshare 7" s LVGL je doporučena varianta, kde se API stahuje ve vlastním FreeRTOS
 > tasku: [DevOpsDashboard-doporuceni-LVGL.md](DevOpsDashboard-doporuceni-LVGL.md), kap. 4.
 
@@ -45,7 +53,7 @@ firmware jen zobrazuje.
 | Metoda | `GET` |
 | Cesta | libovolná, např. `/api/dashboard` – celá URL se zadává ve webu zařízení |
 | Protokol | **`http://` v lokální síti** (doporučeno); `https://` funguje, ale bez ověření certifikátu a stojí ~45 kB RAM |
-| Autentizace | **žádná** (firmware zatím neumí posílat vlastní hlavičky – viz 4.3) |
+| Autentizace | **žádná** (firmware kulatých desek zatím neumí posílat vlastní hlavičky – viz 4.3). DevOpsDashboard43 posílá `X-Api-Key` |
 | Odpověď | `200 OK`, `Content-Type: application/json; charset=utf-8` |
 | Velikost | ideálně **< 8 kB**, tvrdý strop 128 kB (`NET_MAX_TEXT`) |
 | Doba odpovědi | **< 2 s**; firmware čeká max. 6 s na spojení + 10 s na odpověď |

@@ -8,15 +8,17 @@
 > [plán napojení REST API](DevOpsDashboard43-REST-API-plan.md),
 > [README firmwaru 2.1](../DevOpsDashboard/README.md).
 >
-> Stav: **fáze 0–5 hotové**, firmware 0.1.0 běží na desce ([README](../DevOpsDashboard43/README.md),
-> [programátorská dokumentace](DevOpsDashboard43-programatorska-dokumentace.md)).
+> Stav: **fáze 0–5 hotové**, firmware 0.2.0 běží na desce a ukazuje data z REST API
+> ([README](../DevOpsDashboard43/README.md),
+> [programátorská dokumentace](DevOpsDashboard43-programatorska-dokumentace.md),
+> [plán napojení REST API](DevOpsDashboard43-REST-API-plan.md), fáze 43.7–43.11 hotové).
 > **Otevřené:** OTA se občas přeruší ([K ŘEŠENÍ](#výsledky-fáze-5-14-11-2026)), neověřený výpadek
 > Wi-Fi a 24h běh. Plán vznikl 14. 11. 2026.
 
 Nový experimentální projekt `DevOpsDashboard43` pro desku **Waveshare ESP32-S3-Touch-LCD-4.3**
 (SKU 25948, 800×480). Grafiku obstará **LVGL 9**. Web, Wi-Fi portál a nastavení se převezmou
 z [DevOpsDashboard](../DevOpsDashboard). Kompatibilita s kulatými deskami 2.1 / 2.8C se
-**nepožaduje**. REST API zatím není: dashboard ukazuje testovací data.
+**nepožaduje**. Od verze 0.2.0 dashboard ukazuje Poirot počítače z REST API (dříve testovací data).
 
 ## 0. Shrnutí rozhodnutí
 
@@ -339,6 +341,8 @@ tohoto plánu a [stavu a dalších kroků](DevOpsDashboard-dalsi-kroky.md).
 | `lv_conf.h` a konfiguraci desky knihovny nevidí | nepřeloží se / špatná deska | **vyřešeno** ve fázi 0: stačí složka sketche |
 | Poškozený globální toolchain 3.3.12 | build mimo profil padá | překládat jen přes profil; globální instalaci opravit (fáze 0) |
 | Zrušení obrazu při zápisu do flash / Wi-Fi zátěži | krátké bliknutí | bounce buffer, restart ve VSYNC, méně zápisů NVS |
+| Bounce buffer 10 řádků nestačí, když LVGL kreslí | duchové řádků o 20 výš, blikání při každém překreslení | **vyřešeno** ve verzi 0.2.0: 20 řádků (2 × 32 kB interní RAM) |
+| Chyba ESP-IDF 5.5.5: po ztraceném přerušení DMA zůstane obraz posunutý ([espressif/esp-idf#19070](https://github.com/espressif/esp-idf/issues/19070)) | trvalý posun obrazu | **vyřešeno** ve verzi 0.2.0: `LvPort` nuluje čítač ve VSYNC; zbývá bliknutí jednoho snímku. Při přechodu na novější core ověřit, že oprava je v ESP-IDF |
 | Interní RAM (LVGL + Wi-Fi + bounce buffery) | pády, selhání HTTP | paměť LVGL a framebuffery v PSRAM, hlídat `/api/status` |
 | Režim FULL překresluje celou obrazovku | 9 FPS, 97 % CPU | **vyřešeno** režimem DIRECT: 29 FPS, 57 % CPU |
 | GPIO0 sdílený s displejem (G3) | rušení obrazu | tlačítko BOOT číst jen před inicializací displeje |
@@ -346,7 +350,7 @@ tohoto plánu a [stavu a dalších kroků](DevOpsDashboard-dalsi-kroky.md).
 
 ## 7. Mimo rozsah
 
-- REST API: navazující krok, plán v [DevOpsDashboard43-REST-API-plan.md](DevOpsDashboard43-REST-API-plan.md)
+- REST API: **hotové** ve verzi 0.2.0, plán v [DevOpsDashboard43-REST-API-plan.md](DevOpsDashboard43-REST-API-plan.md)
   (fáze 43.7–43.11: profily prostředí, API klíč, fetch task, ruční obnovení).
 - Další desky (7", 5", kulaté 2.1 / 2.8C). ESP32_Display_Panel je podporuje, takže je lze přidat později.
 

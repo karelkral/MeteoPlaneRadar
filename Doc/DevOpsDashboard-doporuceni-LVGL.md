@@ -55,7 +55,7 @@ obsahuje. Tabulka slouží ke kontrole a ladění. Zdrojem je ClawPal `board_rgb
 | Časování | PCLK 16 MHz; HSYNC i VSYNC: pulse / back porch / front porch = 4 / 8 / 8; `pclk_active_neg = 1` |
 | RGB signály | HSYNC 46, VSYNC 3, DE 5, PCLK 7 |
 | Data D0–D15 | 14, 38, 18, 17, 10, 39, 0, 45, 48, 47, 21, 1, 2, 42, 41, 40 |
-| Framebuffery | 2× v PSRAM (2 × 750 kB), bounce buffer 10 řádků, přepnutí na konci snímku, takže se obraz netrhá |
+| Framebuffery | 2× v PSRAM (2 × 750 kB), bounce buffer 10 řádků (na 4.3" s LVGL bylo potřeba **20 řádků**, viz [programátorská dokumentace 4.3](DevOpsDashboard43-programatorska-dokumentace.md)), přepnutí na konci snímku, takže se obraz netrhá |
 | I2C | SDA 8, SCL 9, 400 kHz (dotyk i expandér) |
 | Dotyk | GT911, INT na GPIO4; při resetu s INT v log. 0 se ozve na adrese 0x5D |
 | Expandér CH422G | adresa 0x24 = režim (1 = výstupy zapnuté), 0x38 = hodnoty výstupů |
