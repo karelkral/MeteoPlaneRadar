@@ -5,7 +5,6 @@
 //  OFL.txt in this folder.
 //
 //  inter_20/24/32   Regular, printable ASCII + degree sign, middle dot, en dash
-//  inter_sb_24      SemiBold, digits and "%"  (percentages on the ring)
 //  inter_sb_72      SemiBold, digits, " ", "/" and "-"  ("Error / Total" in the middle of the ring)
 //  inter_sb_160     SemiBold, digits, ":" and "-" (the clock)
 // =============================================================================
@@ -15,6 +14,5 @@
 LV_FONT_DECLARE(inter_20)
 LV_FONT_DECLARE(inter_24)
 LV_FONT_DECLARE(inter_32)
-LV_FONT_DECLARE(inter_sb_24)
 LV_FONT_DECLARE(inter_sb_72)
 LV_FONT_DECLARE(inter_sb_160)

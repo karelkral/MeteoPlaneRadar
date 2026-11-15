@@ -20,7 +20,7 @@
 #define REFRESH_W   56              // touch target of the refresh icon
 #define SPIN_MS     1000
 
-static const char* const TITLES[UI_SCREEN_COUNT] = { "DevOps dashboard", "Clock" };
+static const char* const TITLES[UI_SCREEN_COUNT] = { "Poirot computers", "Clock" };
 
 static lv_obj_t*    s_tv;
 static lv_obj_t*    s_title;

@@ -2,10 +2,10 @@
 //  DevOpsDashboard43
 //  Screen 0: the dashboard. See ScreenDashboard.h.
 //
-//  The ring chart of DevOpsDashboard redone in LVGL: one lv_arc per slice,
+//  The ring chart of DevOpsDashboard redone in LVGL: one thin lv_arc per slice,
 //  starting at the top and running clockwise, a thin black gap between the
-//  slices. The total sits in the middle, the share of each slice is printed on
-//  it where it fits, and the legend on the right carries the counts.
+//  slices. "Error / Total" sits in the middle and the legend on the right
+//  carries the counts.
 // =============================================================================
 #include "ScreenDashboard.h"
 #include "Theme.h"
@@ -18,7 +18,7 @@
 #define RING_CX     230
 #define RING_CY     (UI_TILE_H / 2)
 #define RING_OUT    175
-#define RING_IN     115
+#define RING_IN     140
 #define RING_GAP    1              // degrees of black between two slices
 #define LEGEND_DOT  470            // x of the legend dots
 #define LEGEND_TEXT 500            // x of the names
@@ -42,7 +42,6 @@ static lv_color_t shownColor(int i, bool stale) {
 static lv_obj_t* s_ring;                        // square container of the arcs
 static lv_obj_t* s_empty;                       // grey ring while there is no data
 static lv_obj_t* s_arc[DASH_STATUS_COUNT];
-static lv_obj_t* s_pct[DASH_STATUS_COUNT];
 static lv_obj_t* s_dot[DASH_STATUS_COUNT];
 static lv_obj_t* s_total;
 static lv_obj_t* s_caption;
@@ -85,12 +84,11 @@ void ScreenDashboard_Create(lv_obj_t* tile) {
   s_empty = makeArc(s_ring, COL_LINE);
   lv_arc_set_angles(s_empty, 0, 360);
   for (int i = 0; i < DASH_STATUS_COUNT; i++) s_arc[i] = makeArc(s_ring, sliceColor(i));
-  for (int i = 0; i < DASH_STATUS_COUNT; i++) s_pct[i] = makeLabel(s_ring, &inter_sb_24, COL_BG);
 
   s_total = makeLabel(s_ring, &inter_sb_72, COL_TEXT);
   lv_obj_align(s_total, LV_ALIGN_CENTER, 0, -14);
   s_caption = makeLabel(s_ring, &inter_20, COL_DIM);
-  lv_label_set_text(s_caption, "Poirot computers");
+  lv_label_set_text(s_caption, "Error / Total");
   lv_obj_align(s_caption, LV_ALIGN_CENTER, 0, 38);
 
   const int y0 = RING_CY - (DASH_STATUS_COUNT - 1) * LEGEND_DY / 2;
@@ -164,13 +162,12 @@ void ScreenDashboard_SetData(const ApiSnapshot& s) {
   if (s.valid) for (int i = 0; i < DASH_STATUS_COUNT; i++) sum += cnt[i];
 
   lv_obj_set_hidden(s_empty, sum != 0);
-  if (s.valid) lv_label_set_text_fmt(s_total, "%u", (unsigned)s.total);
-  else         lv_label_set_text(s_total, "-");
+  if (s.valid) lv_label_set_text_fmt(s_total, "%u / %u", (unsigned)s.error, (unsigned)s.total);
+  else         lv_label_set_text(s_total, "- / -");
   lv_obj_set_style_text_color(s_total, s.valid && !stale ? COL_TEXT : COL_DIM, 0);
 
   // Slices: whole degrees (LV_USE_FLOAT is off). The running angle is rounded,
   // not each sweep, so the slices always add up to the full circle.
-  const int rMid = (RING_IN + RING_OUT) / 2;
   uint32_t acc = 0;
   for (int i = 0; i < DASH_STATUS_COUNT; i++) {
     const lv_color_t col = shownColor(i, stale);
@@ -188,19 +185,6 @@ void ScreenDashboard_SetData(const ApiSnapshot& s) {
     const bool show = v && a1 - a0 > gap;
     lv_obj_set_hidden(s_arc[i], !show);
     if (show) lv_arc_set_angles(s_arc[i], a0 + gap, a1);
-
-    lv_obj_set_hidden(s_pct[i], true);
-    if (!show) continue;
-    char pct[8];
-    snprintf(pct, sizeof(pct), "%u%%", (unsigned)lroundf(100.0f * v / sum));
-    lv_point_t size;
-    lv_text_get_size(&size, pct, &inter_sb_24, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    const float sweep = (a1 - a0) * (float)M_PI / 180.0f;
-    if (sweep * rMid < size.x + 10) continue;    // too narrow for the text
-    const float mid = ((a0 + a1) / 2.0f - 90.0f) * (float)M_PI / 180.0f;
-    lv_label_set_text(s_pct[i], pct);
-    lv_obj_align(s_pct[i], LV_ALIGN_CENTER, (int)lroundf(rMid * cosf(mid)), (int)lroundf(rMid * sinf(mid)));
-    lv_obj_set_hidden(s_pct[i], false);
   }
 
   for (int i = 0; i < DASH_STATUS_COUNT; i++) {
