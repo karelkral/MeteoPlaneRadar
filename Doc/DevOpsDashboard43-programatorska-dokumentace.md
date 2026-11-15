@@ -229,6 +229,66 @@ se netrhá. Strop 30 FPS dává `LV_DEF_REFR_PERIOD` = 33 ms v `lv_conf.h`.
 | `LvPort_Display()` | `lv_display_t*` |
 | `LvPort_Restart()` | čistý restart (kap. 13.2) |
 
+### 5.4 Zbývající bliknutí při obnovení dat (ztracené přerušení DMA)
+
+Stav 15. 11. 2026, core 3.3.12 (ESP-IDF 5.5.5). Asi u 2 z 10 obnovení dat se obraz na jeden
+snímek pokazí (`panelResyncs` v `/api/status` přibude). Obejití z kap. 5.1 brání jen tomu,
+aby pokažení zůstalo natrvalo.
+
+**Příčina.** Bounce buffer 20 řádků odejde za ~1,1 ms (snímek ~26 ms / 24 bloků). Když se
+přerušení DMA EOF nestihne obsloužit do konce dalšího bloku, dvě přerušení splynou a jeden
+buffer se nedoplní: panel zobrazí starý blok a zbytek snímku je posunutý. Restart ve VSYNC to
+srovná. Jeden pokažený snímek tak stojí každé ztracené přerušení v **každé** verzi ESP-IDF –
+liší se jen tím, zda se obraz srovná sám.
+
+| ESP-IDF | Výběr bufferu v `lcd_rgb_panel_eof_handler` | Ztracené přerušení |
+| --- | --- | --- |
+| 5.1, 5.2 (core 3.0.x) | podle deskriptoru (`tx_eof_desc_addr`) | jeden pokažený snímek |
+| 5.3 – 5.5.6 (core 3.1 – 3.3.12) | `bb_eof_count % 2`, čítač se při `RESTART_IN_VSYNC=y` nenuluje | posun natrvalo ([espressif/esp-idf#19070](https://github.com/espressif/esp-idf/issues/19070)); s obejitím v `LvPort` jeden snímek |
+| `release/v5.3` – `v5.5`, master (oprava `c0fb05b`, master navíc `201ad05`) | čítač se nuluje při každém restartu | jeden pokažený snímek |
+
+**Srovnání s MeteoPlaneRadar** ([petus/MeteoPlaneRadar](https://github.com/petus/MeteoPlaneRadar),
+stav ke commitu `22127d2`, 5. 11. 2026). Upstream ztracené přerušení neřeší – nepotřebuje to,
+protože je připnutý na core 3.0.7 (ESP-IDF 5.1). Jeho úpravy obrazu v historii commitů:
+
+| Commit | Verze | Změna |
+| --- | --- | --- |
+| `bcf53eb` | 0.2 | jeden framebuffer + bounce buffer 10 řádků, **pixel clock 8 MHz** („halves the DMA bandwidth demand on the PSRAM bus“), kopie snímku od VSYNC |
+| `ada551a` | 0.5 | dva framebuffery + bounce buffer, přepnutí ukazatele bez kopie (pruh trhání uprostřed) |
+| `293ef7c` | – | čítač VSYNC pro hlídání displeje |
+| `90e3136` | 0.6.5 | deska 2.8C, vlastní vertikální časování, také 8 MHz |
+
+Stejnou chybu má i [DevOpsDashboard](../DevOpsDashboard) (core 3.3.10, ESP-IDF 5.5.4, ovladač
+převzatý z MeteoPlaneRadar s bounce bufferem 10 řádků), obejití tam zatím není.
+
+**Návrat na starší core – ne.** ESP32_Display_Panel 1.0.4 vyžaduje core ≥ 3.1.0 (ESP-IDF ≥ 5.3).
+Core 3.0.x by znamenal vlastní ovladač RGB panelu, CH422G, GT911 a podsvícení místo knihovny
+a bliknutí by stejně zůstalo (viz tabulka – jen bez trvalého posunu, který už řeší `LvPort`).
+
+**Čekání na opravu v ESP-IDF – bliknutí neodstraní.** Oprava `c0fb05b` dělá totéž co `LvPort`
+(nulování čítače při restartu); autor hlášení po testu uvádí jeden pokažený snímek. Tag v5.5.6
+ji neobsahuje, core 3.3.12 také ne. Až bude v core, jde obejití v `LvPort` (hledání privátního
+pole ve struktuře ovladače) odstranit; do té doby po každé změně core ověřit, že log nehlásí
+„resync NOT installed“.
+
+**Co by bliknutí odstranilo – zabránit ztrátě přerušení** (zatím nezkoušeno, v pořadí):
+
+1. **Najít spouštěč.** Porovnat přírůstky `panelResyncs` s okamžiky stažení z API. Obnovení dat
+   do NVS nezapisuje. Hypotéza: souběh kreslení LVGL do PSRAM, Wi-Fi/TLS a kopie bloku
+   z PSRAM v přerušení – kopie trvá déle než jeden blok.
+2. **Nižší pixel clock** (jako MeteoPlaneRadar): 16 → 13–14 MHz, méně FPS. 8 MHz nejde – panel
+   by běžel ~17 Hz a blikal.
+3. **Větší bounce buffer** (24 nebo 30 řádků; 480 musí být dělitelné 2 × počtem řádků). Pomůže
+   jen proti krátkým výpadkům přerušení, ne proti pomalé PSRAM, a ubere interní RAM potřebnou
+   pro TLS (~45 kB).
+4. **Vlastní sdkconfig** s `CONFIG_LCD_RGB_ISR_IRAM_SAFE`, `CONFIG_GDMA_ISR_IRAM_SAFE`
+   a `CONFIG_SPIRAM_XIP_FROM_PSRAM` (v core 3.3.12 všechny vypnuté). Nejrobustnější, ale
+   předkompilované Arduino core to neumožní – build přes esp32-arduino-lib-builder, pioarduino
+   nebo čisté ESP-IDF.
+
+Doporučení: zůstat na core 3.3.12 s obejitím, změřit bod 1, podle výsledku zkusit 2, pak 3.
+Bod 4 jen pokud bliknutí opravdu vadí.
+
 ## 6. UI – rám, obrazovky, překryvy
 
 ### 6.1 Vrstvy
@@ -527,6 +587,7 @@ jen jednou). Handler běží v `loop()`: smí volat `Settings` a `Ui_*`, nesmí 
 | Téma | Detail |
 | --- | --- |
 | OTA se občas přeruší | otevřený problém, viz kap. 10 a plán |
+| Bliknutí jednoho snímku při obnovení dat | ztracené přerušení DMA EOF; návrat na starší core ani oprava v ESP-IDF ho neodstraní – viz kap. 5.4 |
 | `ESP.restart()` | zasekne se → vždy `LvPort_Restart()` (kap. 13.2) |
 | Zápis do flash | ruší obraz jen při dlouhém zápisu (OTA); krátké zápisy NVS bez viditelné změny |
 | GPIO0 / BOOT | datový vodič displeje, číst jen před `LvPort_Begin()` |

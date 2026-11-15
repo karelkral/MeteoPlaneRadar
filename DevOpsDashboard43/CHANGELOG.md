@@ -38,7 +38,7 @@ The dashboard shows real data: the Poirot computers from the REST API.
 - Dashboard look (widget plan "Poirot computers"): thin ring (radius 140-175),
   `Error / Total` in the middle instead of the total, no percentages on the
   slices, slices and legend ordered Waiting, Running, Warning, Error, Warning
-  amber (`0xD29922`). The title in the status bar is "Poirot computers".
+  amber (`0xD29922`), Error bright red (`0xFF1A1A`). The title in the status bar is "Poirot computers".
   `inter_sb_72` got the space and `/` glyphs; the unused `inter_sb_24` is gone.
 
 ## 0.1.0 (unreleased)

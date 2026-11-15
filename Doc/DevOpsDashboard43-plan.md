@@ -342,7 +342,7 @@ tohoto plánu a [stavu a dalších kroků](DevOpsDashboard-dalsi-kroky.md).
 | Poškozený globální toolchain 3.3.12 | build mimo profil padá | překládat jen přes profil; globální instalaci opravit (fáze 0) |
 | Zrušení obrazu při zápisu do flash / Wi-Fi zátěži | krátké bliknutí | bounce buffer, restart ve VSYNC, méně zápisů NVS |
 | Bounce buffer 10 řádků nestačí, když LVGL kreslí | duchové řádků o 20 výš, blikání při každém překreslení | **vyřešeno** ve verzi 0.2.0: 20 řádků (2 × 32 kB interní RAM) |
-| Chyba ESP-IDF 5.5.5: po ztraceném přerušení DMA zůstane obraz posunutý ([espressif/esp-idf#19070](https://github.com/espressif/esp-idf/issues/19070)) | trvalý posun obrazu | **vyřešeno** ve verzi 0.2.0: `LvPort` nuluje čítač ve VSYNC; zbývá bliknutí jednoho snímku. Při přechodu na novější core ověřit, že oprava je v ESP-IDF |
+| Chyba ESP-IDF 5.5.5: po ztraceném přerušení DMA zůstane obraz posunutý ([espressif/esp-idf#19070](https://github.com/espressif/esp-idf/issues/19070)) | trvalý posun obrazu | **vyřešeno** ve verzi 0.2.0: `LvPort` nuluje čítač ve VSYNC; zbývá bliknutí jednoho snímku. Při přechodu na novější core ověřit, že oprava je v ESP-IDF. Rozbor a další možnosti v [programátorské dokumentaci, kap. 5.4](DevOpsDashboard43-programatorska-dokumentace.md#54-zbývající-bliknutí-při-obnovení-dat-ztracené-přerušení-dma) |
 | Interní RAM (LVGL + Wi-Fi + bounce buffery) | pády, selhání HTTP | paměť LVGL a framebuffery v PSRAM, hlídat `/api/status` |
 | Režim FULL překresluje celou obrazovku | 9 FPS, 97 % CPU | **vyřešeno** režimem DIRECT: 29 FPS, 57 % CPU |
 | GPIO0 sdílený s displejem (G3) | rušení obrazu | tlačítko BOOT číst jen před inicializací displeje |

@@ -364,7 +364,7 @@ ApiSnapshot DevOpsApi_Get();                       // odkudkoli, vrací kopii
 | Paměť | ✅ interní RAM mezi stahováními stabilní (~133 kB), během TLS o ~40 kB méně |
 | Občasná chyba sítě | ⚠️ asi 1 z 7 stažení skončí `-1` / `-11` (TLS nebo odpověď pomalejší než timeout); opakování za 5 s (`API_RETRY_MS`) to skryje |
 | Obraz při překreslování | ✅ po opravě: bounce buffer 20 řádků (s 10 řádky duchové a blikání, viz [programátorská dokumentace](DevOpsDashboard43-programatorska-dokumentace.md)) |
-| Trvalý posun obrazu | ✅ po opravě: nulování čítače bounce bufferů ve VSYNC (chyba ESP-IDF 5.5.5, espressif/esp-idf#19070). Zbývá krátké bliknutí jednoho snímku asi u 2 z 10 obnovení |
+| Trvalý posun obrazu | ✅ po opravě: nulování čítače bounce bufferů ve VSYNC (chyba ESP-IDF 5.5.5, espressif/esp-idf#19070). Zbývá krátké bliknutí jednoho snímku asi u 2 z 10 obnovení – rozbor v [programátorské dokumentaci, kap. 5.4](DevOpsDashboard43-programatorska-dokumentace.md#54-zbývající-bliknutí-při-obnovení-dat-ztracené-přerušení-dma) |
 | Výpadek Wi-Fi, tovární reset, 24h běh | ⏳ neověřeno |
 
 Nalezené chyby mimo plán: `Net_ReadBody` neukončilo tělo přesně tak dlouhé jako `Content-Length`
