@@ -23,6 +23,9 @@ section{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:1
 label{display:block;color:#aaa;font-size:13px;margin:10px 0 4px}
 input,select{width:100%;padding:10px;background:#111;border:1px solid #333;border-radius:6px;color:#eee;font-size:15px}
 input[type=range]{padding:0}
+input[type=checkbox]{width:auto;margin-right:6px;vertical-align:middle}
+label.chk{display:inline-block;margin:8px 0 0}
+.url{color:#888;font-size:13px;word-break:break-all}
 button{padding:10px 14px;margin:10px 6px 0 0;font-size:15px;border:0;border-radius:6px;background:#2d7;color:#000;font-weight:600;cursor:pointer}
 button.alt{background:#333;color:#eee}
 button.danger{background:#c33;color:#fff}
@@ -68,7 +71,7 @@ a{color:#5bf}
 <label for="apiInt">Refresh interval [s]</label>
 <input id="apiInt" type="number" min="5" max="3600">
 <button id="bApi">Save</button>
-<div class="hint">Base URL of the API, without /IotDashboard/... The key stays on the device and is never shown again; leave the field empty to keep it. Clearing the URL removes the profile together with its key. Test uses the saved profile, so press Save first.</div>
+<div class="hint">The profiles and their addresses are fixed in the firmware. The key stays on the device and is never shown again; leave the field empty to keep it, or tick "delete key" to remove it. Test uses the saved key, so press Save first.</div>
 </section>
 
 <section id="secDisp" style="display:none">
@@ -113,14 +116,17 @@ function slotRow(i,w){
 }
 function profRow(i,p){
  const d=document.createElement("div");d.className="prof";
- const mk=(label,id,type,ph,val)=>{
-  const l=document.createElement("label");l.htmlFor=id;l.textContent=label;
-  const e=document.createElement("input");e.id=id;e.type=type;e.placeholder=ph;e.value=val||"";
-  if(type=="password")e.autocomplete="new-password";
-  d.append(l,e);return e;};
- mk("Profile "+(i+1)+" - name","apN"+i,"text","e.g. Production",p.name).maxLength=20;
- mk("Base URL","apU"+i,"text","https://<api-host>/<Environment>",p.baseUrl);
- mk("API key","apK"+i,"password",p.hasKey?"(stored)":"API key","");
+ const t=document.createElement("label");t.textContent="Profile "+(i+1)+": "+p.name;
+ const u=document.createElement("div");u.className="url";u.textContent=p.baseUrl;
+ const l=document.createElement("label");l.htmlFor="apK"+i;l.textContent="API key";
+ const e=document.createElement("input");e.id="apK"+i;e.type="password";e.autocomplete="new-password";
+ e.placeholder=p.hasKey?"(stored)":"API key";
+ d.append(t,u,l,e);
+ if(p.hasKey){
+  const c=document.createElement("input");c.type="checkbox";c.id="apC"+i;
+  const cl=document.createElement("label");cl.className="chk";cl.htmlFor=c.id;
+  cl.prepend(c);cl.append("delete key");d.append(cl,document.createElement("br"));
+ }
  const b=document.createElement("button");b.className="alt";b.textContent="Test";b.onclick=()=>testProfile(i);
  const r=document.createElement("div");r.className="res";r.id="apR"+i;
  d.append(b,r);return d;
@@ -198,15 +204,17 @@ $("bSlots").onclick=async()=>{
 };
 $("bApi").onclick=async()=>{
  const profiles=CFG.apiProfiles.map((_,i)=>{
-  const p={name:$("apN"+i).value.trim(),baseUrl:$("apU"+i).value.trim()};
-  const k=$("apK"+i).value.trim();if(k)p.key=k;return p;});
+  const p={};
+  const k=$("apK"+i).value.trim();if(k)p.key=k;
+  const c=$("apC"+i);if(c&&c.checked)p.clearKey=true;
+  return p;});
  try{await api("/api/config",{apiProfiles:profiles,apiActive:parseInt($("apiActive").value)||0,
    apiIntervalSec:parseInt($("apiInt").value)||30});
   CFG=await api("/api/config");renderApi();
   msg("API settings saved",true);
  }catch(e){
   const m=/^apiProfile(\d)$/.exec(e.message);
-  msg(m?"Profile "+(+m[1]+1)+": the URL has to start with http:// or https://, the name is at most 20 characters, the key at most 128":"Failed: "+e.message);}
+  msg(m?"Profile "+(+m[1]+1)+": the key is at most 128 characters":"Failed: "+e.message);}
 };
 let briT;
 $("bri").oninput=()=>{const v=parseInt($("bri").value);$("briVal").textContent=v+" %";
