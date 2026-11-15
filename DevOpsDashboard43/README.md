@@ -14,7 +14,7 @@ Plan and progress: [../Doc/DevOpsDashboard43-plan.md](../Doc/DevOpsDashboard43-p
 
 | # | Screen | Content |
 | --- | --- | --- |
-| 0 | Dashboard | ring chart of the **Poirot computers** from the REST API (Running green, Waiting blue, Warning yellow, Error red), the total in the middle, the legend with counts and a status line (age of the data or the error) |
+| 0 | Dashboard | thin ring chart of the **Poirot computers** from the REST API (Waiting blue, Running green, Warning amber, Error red), `Error / Total` in the middle, the legend with counts and a status line (age of the data or the error) |
 | 1 | Clock | large time and date |
 
 **Swipe left / right** switches between them; the dots in the status bar show
@@ -22,7 +22,7 @@ which one is active. The time comes from NTP (the HTTP `Date` header is a
 fallback for networks that block NTP).
 
 The status bar of the dashboard shows the name of the active API profile
-(`DevOps dashboard · Production`). The **⟳ icon** left of the clock refreshes
+(`Poirot computers · Production`). The **⟳ icon** left of the clock refreshes
 the data at once; a small spinner replaces it while a download runs, and it is
 hidden when no profile is set up. The data refresh by themselves every 30 s (configurable). When the
 last download failed, or the data are older than three intervals, the ring turns
