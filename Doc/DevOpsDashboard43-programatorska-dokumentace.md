@@ -1,7 +1,7 @@
 # DevOps Dashboard 4.3 – programátorská dokumentace
 
 > Firmware: [DevOpsDashboard43](../DevOpsDashboard43) **0.1.0** pro Waveshare ESP32-S3-Touch-LCD-4.3
-> (SKU 25948), Arduino + LVGL 9.6.
+> (SKU 25948), běží i na 4.3B (SKU 27848, kap. 2.5), Arduino + LVGL 9.6.
 > Související dokumenty: [README firmwaru](../DevOpsDashboard43/README.md) (uživatel),
 > [plán a průběh prací](DevOpsDashboard43-plan.md) (rozhodnutí, výsledky testů, otevřené problémy),
 > [doporučení: LVGL v Arduinu](DevOpsDashboard-doporuceni-LVGL.md) (návrh napojení REST API).
@@ -60,7 +60,15 @@ je nové. Projekty nesdílejí kód – oprava v jednom se do druhého musí př
 | ArduinoJson | 7.4.3 | |
 
 FQBN: `esp32:esp32:waveshare_esp32_s3_touch_lcd_43:PSRAM=enabled,FlashSize=16M,FlashMode=qio,PartitionScheme=custom`
-(USB CDC On Boot zůstává vypnuté – log jde přes převodník CH343).
+(USB CDC On Boot zůstává vypnuté – log jde přes převodník CH343). Pro desku 4.3B jiné FQBN,
+viz kap. 2.5.
+
+> **Arduino IDE a core 4.0.0.** 25. 11. 2026 nabídl Boards Manager aktualizaci core na 4.0.0
+> (ESP-IDF 6.1) a po jejím přijetí globální 3.3.12 zmizel. Projekt je připnutý na 3.3.12
+> (ESP32_Display_Panel 1.0.4 i obejití chyby displeje z kap. 5.4 jsou ověřené jen na něm).
+> Build přes profil to neovlivní (vlastní kopie v `Arduino15\internal`); pro překlad v IDE
+> vraťte v Boards Manageru „esp32 by Espressif Systems“ na **3.3.12**. IDE musí mít sketchbook
+> s knihovnami v připnutých verzích (na vývojovém PC `C:\Users\karel\Documents\Arduino`).
 
 ### 2.2 Build vždy přes profil
 
@@ -89,8 +97,51 @@ build mimo profil končí `cannot execute 'as'`) – detaily a oprava v
 ### 2.4 Nahrání a log
 
 - Port: konektor **USB TO UART** (CH343, na vývojovém PC COM9), 115 200 Bd.
+  Deska 4.3B: jediný konektor USB-C = nativní USB ESP32-S3 (303A:1001, na vývojovém PC COM11).
 - Reset z PC: RTS (používá ho arduino-cli i esptool). Čtení logu bez resetu: otevřít port s
   `DTR = RTS = false`.
+
+### 2.5 Deska ESP32-S3-Touch-LCD-4.3B
+
+Firmware běží i na **Waveshare ESP32-S3-Touch-LCD-4.3B** (SKU 27848, s krabičkou 28141).
+Ověřeno 25. 11. 2026: nahrání přes nativní USB, start displeje (2 framebuffery v PSRAM, resync
+bounce bufferů aktivní), přístupový bod a portál.
+
+| | 4.3 (SKU 25948) | 4.3B (SKU 27848) |
+| --- | --- | --- |
+| Modul | ESP32-S3-WROOM-1-N16R8 | stejný |
+| Displej, dotyk, podsvícení | 800×480 RGB (ST7262), GT911 na GPIO8/9, podsvícení CH422G EXIO2 | stejné piny i řízení |
+| Definice v ESP32_Display_Panel 1.0.4 | `BOARD_WAVESHARE_ESP32_S3_TOUCH_LCD_4_3` | `…_4_3_B` – liší se jen názvem a odkazem; projekt používá definici 4.3 i pro 4.3B |
+| USB | dva USB-C: **USB TO UART** (CH343) a nativní USB | **jeden** USB-C – nativní USB (GPIO19/20), CH343 chybí |
+| CH422G EXIO5 | přepínač nativní USB / CAN | digitální vstup DI1 |
+| Navíc | – | RTC PCF85063 (I2C GPIO8/9), RS485 (GPIO43/44), CAN (GPIO15/16), izolované vstupy/výstupy, TF karta, napájení 7–36 V, Li-Ion článek |
+| Varianta v core 3.3.12 | `waveshare_esp32_s3_touch_lcd_43` | `waveshare_esp32_s3_touch_lcd_43B` – jiné jen USB PID a makra pinů RS485/CAN (firmware je nepoužívá) |
+| Volba Flash Size v core | 8M / 16M | není (16 MB napevno) |
+
+Protože 4.3B nemá CH343, musí být zapnuté **USB CDC On Boot**, jinak `Serial` jde na UART0
+(GPIO43/44 = RS485) a log není vidět. Profil `default` v `sketch.yaml` a `build.cmd` jsou pro
+4.3 bez CDC; pro 4.3B se FQBN přepíše na příkazové řádce (core a knihovny zůstávají z profilu):
+
+```powershell
+$cli = "$env:LOCALAPPDATA\Programs\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe"
+$fqbn = "esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,FlashMode=qio,PartitionScheme=custom,USBMode=hwcdc,CDCOnBoot=cdc"
+& $cli compile --profile default --fqbn $fqbn --build-path DevOpsDashboard43\build\43b DevOpsDashboard43
+& $cli upload  --profile default --fqbn $fqbn -p COM11 --input-dir DevOpsDashboard43\build\43b DevOpsDashboard43
+```
+
+Arduino IDE: Board *Waveshare ESP32-S3-Touch-LCD-4.3B*, PSRAM *Enabled*, Flash Mode *QIO*,
+Partition Scheme *Custom*, USB Mode *Hardware CDC and JTAG*, USB CDC On Boot *Enabled*.
+
+Poznámky:
+
+- Výstup do `build\43b` (git ho ignoruje spolu s `build\`), aby se nepřepsal build pro 4.3.
+  Nová `--build-path` = první překlad celého LVGL (~15–20 min).
+- Nahrání přes nativní USB funguje bez tlačítek (reset přes USB-JTAG). Když deska na portu
+  nenaběhne do zavaděče, podržet BOOT a stisknout RESET.
+- `.bin` z buildu pro 4.3 by na 4.3B měl běžet (stejné piny), jen bez logu na USB – neověřeno.
+  Pro 4.3B nahrávat build z `build\43b`.
+- RTC, RS485, CAN ani izolované vstupy/výstupy firmware nepoužívá.
+- Neověřeno na 4.3B: REST API, OTA, tovární reset tlačítkem BOOT, dlouhý běh.
 
 ## 3. Struktura projektu
 
@@ -591,7 +642,9 @@ jen jednou). Handler běží v `loop()`: smí volat `Settings` a `Ui_*`, nesmí 
 | `ESP.restart()` | zasekne se → vždy `LvPort_Restart()` (kap. 13.2) |
 | Zápis do flash | ruší obraz jen při dlouhém zápisu (OTA); krátké zápisy NVS bez viditelné změny |
 | GPIO0 / BOOT | datový vodič displeje, číst jen před `LvPort_Begin()` |
-| CH422G EXIO5 | přepíná nativní USB / CAN; ESP32_Display_Panel ho nastavuje sám, log jde přes CH343 |
+| CH422G EXIO5 | přepíná nativní USB / CAN; ESP32_Display_Panel ho nastavuje sám, log jde přes CH343 (na 4.3B je EXIO5 digitální vstup, log jde přes nativní USB – kap. 2.5) |
+| Deska 4.3B | build s variantou 4.3B a USB CDC On Boot zapnutým, jinak není log – kap. 2.5 |
+| Core 4.0.0 v Arduino IDE | projekt je připnutý na 3.3.12; po aktualizaci v Boards Manageru vrátit 3.3.12 – kap. 2.1 |
 | Jas | panel umí jen zap/vyp – jas je černá vrstva; skutečný příkon se nemění (kromě 0 %) |
 | LVGL 9.6 API | `lv_obj_add_flag` / `remove_flag` / `has_flag` jsou deprecated (varování v logu) → `lv_obj_set_hidden`, `lv_obj_set_clickable`, `lv_obj_set_scrollable`, …; hlavičky v `include/lvgl/`, `#include <lvgl.h>` stačí |
 | `sizeof(lv_color_t)` | v LVGL 9 jsou to 3 B – velikost bufferu RGB565 počítat `× 2`, ne `× sizeof(lv_color_t)` (chyba v adaptéru Waveshare) |

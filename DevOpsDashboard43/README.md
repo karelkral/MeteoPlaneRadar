@@ -1,7 +1,8 @@
 # DevOps Dashboard 4.3
 
 A two-screen DevOps dashboard for the **Waveshare ESP32-S3-Touch-LCD-4.3**
-(SKU 25948, 800×480 touchscreen), drawn with **LVGL 9**.
+(SKU 25948, 800×480 touchscreen), drawn with **LVGL 9**. It also runs on the
+**ESP32-S3-Touch-LCD-4.3B** (SKU 27848) – see [Board 4.3B](#board-43b).
 
 Experimental successor of [DevOpsDashboard](../DevOpsDashboard) (round 2.1" /
 2.8C boards), which is based on
@@ -63,6 +64,29 @@ Serial log: 115200 Bd on the USB-C connector marked **USB TO UART**.
 
 Fonts: [src/fonts](src/fonts) holds Inter (SIL OFL 1.1) converted for LVGL.
 [tools/gen_fonts.cmd](tools/gen_fonts.cmd) regenerates them (needs Node.js).
+
+### Board 4.3B
+
+Same module, display, touch and backlight wiring as the 4.3, and
+ESP32_Display_Panel uses the same settings for both. The difference that
+matters: the 4.3B has a **single USB-C (native USB)** and no CH343, so the
+serial log needs *USB CDC On Boot* enabled. `build.cmd` builds for the 4.3;
+for the 4.3B override the FQBN (core and libraries still come from the profile):
+
+```powershell
+$fqbn = "esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,FlashMode=qio,PartitionScheme=custom,USBMode=hwcdc,CDCOnBoot=cdc"
+arduino-cli compile --profile default --fqbn $fqbn --build-path DevOpsDashboard43\build\43b DevOpsDashboard43
+arduino-cli upload  --profile default --fqbn $fqbn -p COM11 --input-dir DevOpsDashboard43\build\43b DevOpsDashboard43
+```
+
+Arduino IDE: board *Waveshare ESP32-S3-Touch-LCD-4.3B*, PSRAM *Enabled*,
+Partition Scheme *Custom*, USB CDC On Boot *Enabled* (this board has no Flash
+Size option, 16 MB is fixed). Keep the esp32 core at **3.3.12** – do not accept
+the Boards Manager update to 4.0.0.
+
+Verified on the 4.3B: upload over native USB, display start-up, access point
+and portal. The RTC, RS485, CAN and isolated I/O are not used. Details:
+[programmer's documentation, chapter 2.5](../Doc/DevOpsDashboard43-programatorska-dokumentace.md#25-deska-esp32-s3-touch-lcd-43b).
 
 ## First start
 
